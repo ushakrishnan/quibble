@@ -1,0 +1,41 @@
+# Quibble unified requirements (Python 3.11+; Windows setup uses Python 3.13).
+#
+# Install into this repository's activated .venv:
+#   python -m pip install -r requirements.txt
+#   python -m pip install --no-deps -e .
+#
+# Use your organization's trusted --index-url if required.
+# Windows uses the matching CUDA 12.8 PyTorch/torchvision builds below.
+# A compatible NVIDIA driver is required for GPU use; the CUDA Toolkit is not.
+# Check python -m quibble doctor after installation.
+#
+# fastai enables AutoGluon's NeuralNetFastAI model family. The plum-dispatch pin
+# keeps fastai's dependency resolution stable on Python 3.13.
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128; sys_platform == 'win32'
+torchvision==0.26.0+cu128; sys_platform == 'win32'
+
+numpy>=1.24
+pandas>=2.0
+pyarrow>=14
+scikit-learn>=1.4
+lightgbm>=4.4
+# Provides TabPFNClassifier and TabPFNRegressor; verified on Python 3.13.
+tabpfn==9.2.0
+tabfm[pytorch]>=1.0.1
+structured-data-models>=0.2.1
+autogluon.tabular>=1.1
+catboost>=1.2.10
+xgboost>=3.4.1
+plum-dispatch==2.9.0
+fastai>=2.8.12
+matplotlib>=3.8
+seaborn>=0.13
+jupyter>=1.0
+pytest>=7
+openai>=2.0
+azure-identity>=1.19
+markdown-it-py>=3
+bleach>=6
+psutil; sys_platform == 'win32'

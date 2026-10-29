@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="590" viewBox="0 0 1200 590" role="img" aria-labelledby="title description">
+  <title id="title">Quibble's evidence pipeline</title>
+  <desc id="description">Declared inputs and split controls feed isolated backend fits. Records, row positions, targets, and predictions are saved. Analysis aligns common successful evidence and applies paired diagnostics and configured swap checks. Reports interpret results, show participation and devices, and preserve dated evidence. Source data is reloaded for slices; snapshots are not full data or environment bundles.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="590" rx="20" fill="#f8fafc"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="40" y="58" font-size="30" font-weight="700" fill="#0f172a">Quibble: preserve the evidence behind the decision</text>
+    <text x="40" y="96" font-size="19" fill="#475569">Execution, analysis, and interpretation have separate responsibilities.</text>
+    <g fill="#ffffff" stroke-width="2">
+      <rect x="40" y="140" width="350" height="170" rx="14" stroke="#0f766e"/>
+      <rect x="425" y="140" width="350" height="170" rx="14" stroke="#2563eb"/>
+      <rect x="810" y="140" width="350" height="170" rx="14" stroke="#7c3aed"/>
+      <rect x="810" y="350" width="350" height="170" rx="14" stroke="#7c3aed"/>
+      <rect x="425" y="350" width="350" height="170" rx="14" stroke="#0f766e"/>
+    </g>
+    <g fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M396 225 H418"/>
+      <path d="M781 225 H803"/>
+      <path d="M985 316 V343"/>
+      <path d="M803 435 H782"/>
+    </g>
+    <g font-size="22" font-weight="700" fill="#0f172a">
+      <text x="60" y="178">1. Inputs and controls</text>
+      <text x="445" y="178">2. Isolated backend fits</text>
+      <text x="830" y="178">3. Saved evidence</text>
+      <text x="830" y="388">4. Paired analysis</text>
+      <text x="445" y="388">5. Report and history</text>
+    </g>
+    <g font-size="18" fill="#334155">
+      <text x="60" y="217">Labeled table and declaration</text>
+      <text x="60" y="248">Local source fingerprint</text>
+      <text x="60" y="279">Splits, seeds, device policy</text>
+      <text x="445" y="217">Adapter fit and predict</text>
+      <text x="445" y="248">Effective device and resources</text>
+      <text x="445" y="279">Success, refusal, or error</text>
+      <text x="830" y="217">JSON records and predictions</text>
+      <text x="830" y="248">Targets and original row positions</text>
+      <text x="830" y="279">Reusable current output</text>
+      <text x="830" y="427">Common successful splits</text>
+      <text x="830" y="458">Metrics, disputes, slices</text>
+      <text x="830" y="489">Configured replacement checks</text>
+      <text x="445" y="427">Interpretation and participation</text>
+      <text x="445" y="458">Hardware and evidence limits</text>
+      <text x="445" y="489">Dated result/report snapshots</text>
+    </g>
+    <text x="40" y="385" font-size="19" font-weight="600" fill="#0f172a">Keep the boundaries visible</text>
+    <text x="40" y="424" font-size="17" fill="#475569">Smoke is a separate setup check.</text>
+    <text x="40" y="453" font-size="17" fill="#475569">Slices reload compatible source data.</text>
+    <text x="40" y="482" font-size="17" fill="#475569">Archives omit full inputs and environments.</text>
+    <text x="40" y="557" font-size="18" fill="#475569">Quibble | Beyond the score | Inspect the path from an input table to a replacement decision.</text>
+  </g>
+</svg>

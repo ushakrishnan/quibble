@@ -1,0 +1,5 @@
+dataset,backend,device_effective,run_type,cv,split_seed,model_seed,n_train,n_test,accuracy
+wine,histgb,cpu,smoke,holdout,0,0,124,32,1.0
+wine,lightgbm,cpu,smoke,holdout,0,0,124,32,1.0
+wine,tabfm,cuda,smoke,holdout,0,0,124,32,1.0
+wine,kumo_tabular,cuda,smoke,holdout,0,0,124,32,1.0

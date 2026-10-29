@@ -1,0 +1,122 @@
+{
+  "synthetic": true,
+  "generator": "quibble.generate",
+  "version": 1,
+  "specification": {
+    "version": 1,
+    "name": "retail_clothing_regression",
+    "scenario": "Fictional independent retail clothing replenishment decisions using only information available before the next delivery; predict a continuous inventory-pressure score.",
+    "assumptions": [
+      "Independent rows, no repeated store/item histories or temporal forecasting.",
+      "Inputs are sampled independently; business relationships are illustrative, not calibrated.",
+      "Higher inventory-pressure scores mean greater illustrative shortage pressure; negative scores are allowed. This is not demand units or a probability.",
+      "Inputs exist before the outcome; no IDs, future sales, or post-outcome indicators are predictors.",
+      "No size, style, seasonality, correlated demand, spoilage, or item/store histories are simulated; clothing labels supply context, not domain validation."
+    ],
+    "task": "regression",
+    "rows": 1000,
+    "seed": 42,
+    "target": "inventory_pressure",
+    "features": [
+      {
+        "name": "inventory_coverage",
+        "description": "Clothing inventory coverage at decision time, in days",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 10,
+        "categories": [],
+        "effect": "linear",
+        "weight": -2.0,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "delivery_lead_days",
+        "description": "Expected days until delivery",
+        "distribution": "uniform",
+        "minimum": 1,
+        "maximum": 7,
+        "categories": [],
+        "effect": "linear",
+        "weight": 1.4,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "planned_discount_intensity",
+        "description": "Planned clothing discount intensity, 0 to 1, known before replenishment",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "linear",
+        "weight": 0.8,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "recent_clothing_demand_index",
+        "description": "Clothing demand index from earlier observations only, in illustrative units",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 3,
+        "categories": [],
+        "effect": "linear",
+        "weight": 1.0,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "context_5",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "context_6",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "context_7",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "name": "context_8",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0.0
+      }
+    ],
+    "outcome": {
+      "intercept": 0.0,
+      "scale": 1.0,
+      "noise": 0.5
+    },
+    "interactions": []
+  },
+  "planner": null,
+  "sha256": "9a0c9d7c5a7335c8ffee9cbe71822867a795aeb9676b7d95804698f4aaaf85b3",
+  "numpy_version": "2.5.4",
+  "pandas_version": "2.3.3",
+  "limits": "Independent synthetic rows. No real-world or causal validity is claimed."
+}

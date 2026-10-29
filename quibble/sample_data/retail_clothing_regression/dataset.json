@@ -1,0 +1,6 @@
+{
+  "file": "data.csv",
+  "target": "inventory_pressure",
+  "task": "regression",
+  "categorical_columns": []
+}

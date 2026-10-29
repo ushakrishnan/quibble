@@ -1,0 +1,11 @@
+{
+  "primary": null,
+  "max_quality_drop": 0.01,
+  "max_disagreement": 0.05,
+  "max_confident_disagreement": 0.01,
+  "max_latency_ratio": 2.0,
+  "max_memory_ratio": 1.5,
+  "max_slice_drop": 0.05,
+  "min_slice_n": 30,
+  "max_ece_increase": 0.02
+}

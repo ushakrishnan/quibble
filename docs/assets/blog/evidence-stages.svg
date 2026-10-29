@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="530" viewBox="0 0 1200 530" role="img" aria-labelledby="title description">
+  <title id="title">Four questions, four stages of evidence</title>
+  <desc id="description">Smoke checks establish bounded setup success. Paired evaluation compares models on common rows. Configured policy checks assess measured limits. Representative application and deployment validation are additional work outside Quibble. No stage is replaced by a perfect smoke score.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="530" rx="20" fill="#f8fafc"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="40" y="58" font-size="30" font-weight="700" fill="#0f172a">Beyond the score: match the claim to the evidence</text>
+    <text x="40" y="96" font-size="19" fill="#475569">A successful setup is the beginning of an evaluation, not its conclusion.</text>
+    <rect x="40" y="140" width="255" height="268" rx="14" fill="#ffffff" stroke="#0f766e" stroke-width="2"/>
+    <rect x="328" y="140" width="255" height="268" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+    <rect x="616" y="140" width="255" height="268" rx="14" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+    <rect x="904" y="140" width="255" height="268" rx="14" fill="#fff7ed" stroke="#c2410c" stroke-width="2"/>
+    <g stroke="#64748b" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M301 274 H321"/>
+      <path d="M589 274 H609"/>
+      <path d="M877 274 H897"/>
+    </g>
+    <g font-size="17" font-weight="700">
+      <text x="60" y="176" fill="#0f766e">01 / SETUP</text>
+      <text x="348" y="176" fill="#2563eb">02 / COMPARISON</text>
+      <text x="636" y="176" fill="#7c3aed">03 / POLICY</text>
+      <text x="924" y="176" fill="#c2410c">04 / APPLICATION</text>
+    </g>
+    <g font-size="23" font-weight="700" fill="#0f172a">
+      <text x="60" y="221">Does it run?</text>
+      <text x="348" y="221">What changes?</text>
+      <text x="636" y="221">Within our limits?</text>
+      <text x="924" y="221">Fit for this use?</text>
+    </g>
+    <g font-size="18" fill="#334155">
+      <text x="60" y="267">Bounded smoke sample</text>
+      <text x="60" y="298">Explicit rows and devices</text>
+      <text x="60" y="329">No deployment shortlist</text>
+      <text x="348" y="267">Common splits and rows</text>
+      <text x="348" y="298">Disagreements and costs</text>
+      <text x="348" y="329">Stated uncertainty</text>
+      <text x="636" y="267">Chosen degradation limits</text>
+      <text x="636" y="298">PASS / FAIL /</text>
+      <text x="636" y="329">INCONCLUSIVE</text>
+      <text x="924" y="267">Representative data</text>
+      <text x="924" y="298">Operational acceptance</text>
+      <text x="924" y="329">Monitoring and rollout</text>
+    </g>
+    <text x="60" y="379" font-size="16" fill="#475569">Quibble smoke workflow</text>
+    <text x="348" y="379" font-size="16" fill="#475569">Quibble analysis</text>
+    <text x="636" y="379" font-size="16" fill="#475569">Quibble swap checks</text>
+    <text x="924" y="379" font-size="16" fill="#9a3412">Additional application work</text>
+    <text x="40" y="462" font-size="20" font-weight="600" fill="#0f172a">A perfect score on 32 test rows does not establish equivalence or certify deployment.</text>
+    <text x="40" y="495" font-size="17" fill="#475569">Quibble | Beyond the score | The scope of the experiment bounds the scope of the claim.</text>
+  </g>
+</svg>

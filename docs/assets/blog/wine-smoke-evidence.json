@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "kind": "curated_evidence_not_full_reproduction_bundle",
+  "source_snapshot": "results\\smoke\\092946-908502-8a37f1\\runs\\2026-10-29\\114406-974802-3a85a8",
+  "source_revision": null,
+  "source_revision_note": "No git revision was available in the saved run records.",
+  "dataset": {
+    "name": "wine",
+    "loader": "sklearn.datasets.load_wine",
+    "source": "https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_wine.html",
+    "task": "classification",
+    "source_rows": 178,
+    "features": 13,
+    "classes": 3
+  },
+  "execution": {
+    "run_type": "smoke",
+    "cv": "holdout",
+    "split_seed": 0,
+    "model_seed": 0,
+    "jobs": 1,
+    "device_requested": "cuda",
+    "n_train_per_fit": 124,
+    "n_test_per_fit": 32,
+    "prediction_shape_per_fit": [32, 3],
+    "platform_family": "Windows",
+    "python": "3.13.4",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "torch": "2.11.0+cu128",
+    "backends": ["histgb", "lightgbm", "tabfm", "kumo_tabular"],
+    "effective_devices": {
+      "histgb": "cpu",
+      "lightgbm": "cpu",
+      "tabfm": "cuda",
+      "kumo_tabular": "cuda"
+    }
+  },
+  "observation": {
+    "correct_predictions_per_backend": 32,
+    "accuracy_per_backend": 1.0,
+    "distinct_test_rows": 32,
+    "backend_pairs": 6,
+    "shared_rows_per_pair": 32,
+    "pair_row_observations": 192,
+    "class_disagreements": 0,
+    "disagreement_definition": "Different argmax predicted classes on the same original test row.",
+    "probability_identity_claimed": false
+  },
+  "verification": [
+    "Each source record had no error/refused result and recorded smoke holdout, seed 0, jobs 1.",
+    "Training/test counts and effective devices matched the portable CSV.",
+    "Each probability array had shape (32, 3) and finite values.",
+    "Accuracy was recomputed from argmax predictions against the saved targets.",
+    "Test indices contained 32 unique original row positions.",
+    "All six backend pairs had zero argmax disagreements on the 32 shared rows.",
+    "SHA-256 was computed over the original archived file bytes."
+  ],
+  "source_sha256": {
+    "wine\\histgb_ss0_ms0.json": "a05a06653c1531ee453ea62ce32e610f9ff1b07115b8c35a16852def0dac0068",
+    "wine\\histgb_ss0_ms0.pred.npy": "f3714e32f99bd74397c6fae78c4eaa5d8d7152adf1eee84cd6588dd5f9bf424a",
+    "wine\\lightgbm_ss0_ms0.json": "c445cf6058876d32149eb200f13b5a4c535790b8a631e690b91ab2585115cbe9",
+    "wine\\lightgbm_ss0_ms0.pred.npy": "d6c091cf282d2b64aeb0cc3175021f744cff0d2d935987bba6f66d99e1b135fc",
+    "wine\\tabfm_ss0_ms0.json": "6d1995ff14097b79b77ae19a885da65069a3ecd6e11f8e4fb29c95b50139b90b",
+    "wine\\tabfm_ss0_ms0.pred.npy": "940ec69305d59636fbc6335412d2fe904e44558586b86586b3682561aadfe6b9",
+    "wine\\kumo_tabular_ss0_ms0.json": "fb7844ca02fa4ad54cb40b7511b228496d75fea55030161cd952cf50b38ba2e9",
+    "wine\\kumo_tabular_ss0_ms0.pred.npy": "f76e2b0cde10e9a990350fc740907ba7ae5376a9f516f4da538f97ccf0dcbe77",
+    "wine\\idx_test_ss0.npy": "8dd5d6d01e0d01f51da0568650cfaea33597572e153511615515d2df93e6d0be",
+    "wine\\y_test_ss0.npy": "0f116d92eb3d9c70771a8ea04e1c143c67831a5194f58b946ed2a777e5d5d9ec"
+  },
+  "limits": [
+    "This is a setup smoke check, not a full-data or multi-dataset benchmark.",
+    "The 192 pair-row observations reuse only 32 distinct test rows.",
+    "All-correct predictions on this sample do not establish population-perfect accuracy.",
+    "Predicted-class agreement does not imply identical probability estimates.",
+    "CPU and CUDA execution are mixed; no controlled speed/resource ranking is claimed.",
+    "The source snapshot is local and ignored by git, not included in this curated bundle.",
+    "Hashes identify bytes if original files are supplied; they do not prove execution or reconstruct files.",
+    "The bundle does not contain original inputs, prediction arrays, model weights, or a full environment lock."
+  ]
+}

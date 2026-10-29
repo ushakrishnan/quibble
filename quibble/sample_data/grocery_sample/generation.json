@@ -1,0 +1,124 @@
+{
+  "synthetic": true,
+  "generator": "quibble.generate",
+  "version": 1,
+  "specification": {
+    "version": 1,
+    "name": "grocery_sample",
+    "scenario": "Fictional independent grocery replenishment decisions; predict inventory pressure.",
+    "assumptions": [
+      "Independent rows, no repeated store/item histories or temporal forecasting.",
+      "Inputs are sampled independently; business relationships are illustrative, not calibrated.",
+      "Classification uses a stochastic logistic outcome; regression is a signed pressure index, not demand units.",
+      "Inputs exist before the outcome; no IDs, future sales, or post-outcome indicators are predictors."
+    ],
+    "task": "classification",
+    "rows": 1000,
+    "seed": 42,
+    "target": "stockout",
+    "features": [
+      {
+        "name": "inventory_coverage",
+        "description": "Inventory coverage at decision time, in days",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 10,
+        "categories": [],
+        "effect": "linear",
+        "weight": -2,
+        "missing_rate": 0
+      },
+      {
+        "name": "delivery_lead_days",
+        "description": "Expected days until delivery",
+        "distribution": "uniform",
+        "minimum": 1,
+        "maximum": 7,
+        "categories": [],
+        "effect": "linear",
+        "weight": 1.4,
+        "missing_rate": 0
+      },
+      {
+        "name": "promotion_intensity",
+        "description": "Planned promotion intensity, 0 to 1",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "linear",
+        "weight": 0.8,
+        "missing_rate": 0
+      },
+      {
+        "name": "recent_demand_index",
+        "description": "Demand index calculated only from earlier observations",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 3,
+        "categories": [],
+        "effect": "linear",
+        "weight": 1,
+        "missing_rate": 0
+      },
+      {
+        "name": "context_5",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0
+      },
+      {
+        "name": "context_6",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0
+      },
+      {
+        "name": "context_7",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0
+      },
+      {
+        "name": "context_8",
+        "description": "Independent irrelevant numeric control, not a measured business variable",
+        "distribution": "uniform",
+        "minimum": 0,
+        "maximum": 1,
+        "categories": [],
+        "effect": "none",
+        "weight": 0,
+        "missing_rate": 0
+      }
+    ],
+    "outcome": {
+      "intercept": 0,
+      "scale": 1,
+      "noise": 0.5
+    },
+    "interactions": []
+  },
+  "planner": {
+    "planning": null,
+    "reviewed_specification": true
+  },
+  "sha256": "4d1f82b86c9e2e296a06c3bc9411905151ac519ba263ce5bcedf16722daa7b49",
+  "numpy_version": "2.5.4",
+  "pandas_version": "2.3.3",
+  "limits": "Independent synthetic rows. No real-world or causal validity is claimed."
+}

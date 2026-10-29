@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quibble-ml"  # PyPI name; the import and the command are both "quibble"
+version = "0.1.0"
+description = "Compare tabular ML backends: quality, cost, refusals and row-level disagreement"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy", "pandas", "scikit-learn>=1.4", "lightgbm", "catboost",
+                "psutil; sys_platform == 'win32'"]
+
+[project.optional-dependencies]
+data = ["pyarrow>=14"]
+report = ["matplotlib"]
+autogluon = ["autogluon.tabular"]
+tabpfn = ["tabpfn"]
+tabfm = ["tabfm[pytorch]>=1.0.1"]
+kumo = ["structured-data-models>=0.2.1"]
+dev = ["pytest", "matplotlib", "markdown-it-py>=3", "bleach>=6"]
+web = ["openai>=2.0", "azure-identity>=1.19", "matplotlib", "markdown-it-py>=3", "bleach>=6"]
+site = ["markdown-it-py>=3", "bleach>=6"]
+
+[project.scripts]
+quibble = "quibble.cli:main"
+
+[tool.setuptools]
+packages = ["quibble", "quibble.docs"]
+
+[tool.setuptools.package-dir]
+"quibble.docs" = "docs"
+
+[tool.setuptools.package-data]
+quibble = ["web_assets/*.html", "web_assets/*.js", "web_assets/*.css",
+           "sample_data/*/*.csv", "sample_data/*/*.json"]
+"quibble.docs" = ["*.md", "blog/*.md", "assets/blog/*.svg", "assets/blog/*.png",
+                 "assets/blog/*.csv", "assets/blog/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

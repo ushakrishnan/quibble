@@ -1,0 +1,6 @@
+{
+  "file": "data.csv",
+  "target": "stockout",
+  "task": "classification",
+  "categorical_columns": []
+}
