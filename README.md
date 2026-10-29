@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 [![CSV and Parquet](https://img.shields.io/badge/Data-CSV%20%7C%20Parquet-0ea5e9)](docs/testing-your-data.md)
 [![CPU and CUDA](https://img.shields.io/badge/Compute-CPU%20%7C%20CUDA-76B900?logo=nvidia&logoColor=white)](docs/gpu-and-docker.md)
-[![Status: unreleased](https://img.shields.io/badge/Status-Unreleased-f59e0b)](docs/index.md#trust-levels-what-has-actually-been-run)
+[![Status: v0.0.1 pre-release](https://img.shields.io/badge/Status-v0.0.1%20Pre--release-f59e0b)](https://github.com/ushakrishnan/quibble/releases/tag/v0.0.1)
 
 **Compare ways to predict from your data. See which answers change, and at what cost.**
 

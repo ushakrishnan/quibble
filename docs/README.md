@@ -6,8 +6,8 @@ description: Standalone entry point for installing Quibble, using the workbench,
 ## Quibble documentation
 
 Quibble compares tabular prediction methods on the same held-out rows and reports
-quality, disagreements, execution costs, and replacement checks. It is an unreleased
-local tool, not a hosted service.
+quality, disagreements, execution costs, and replacement checks. Version 0.0.1 is an
+experimental pre-release of a local tool, not a hosted service.
 
 Start with [About Quibble](about.md) for its purpose and limits, then choose a guide:
 
@@ -26,7 +26,9 @@ These Markdown guides can be read directly in a checkout or browsed as a GitHub
 documentation folder. Installation commands assume you are in the source checkout's
 root, not inside this folder. Source: [ushakrishnan/quibble](https://github.com/ushakrishnan/quibble).
 The repository includes a [GitHub Pages deployment workflow](development.md#github-pages-deployment).
-A site URL is live only after deployment succeeds; the Python package remains unreleased.
+A site URL is live only after deployment succeeds. The
+[v0.0.1 GitHub pre-release](https://github.com/ushakrishnan/quibble/releases/tag/v0.0.1)
+is separate from publishing the Python package to PyPI.
 
 In the running workbench, choose **Docs** for a site-style reader with grouped sidebar
 navigation, current-page highlighting, an on-page section index, breadcrumbs, and

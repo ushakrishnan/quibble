@@ -39,6 +39,18 @@ def test_docs_exist():
         assert n in names, n
 
 
+def test_release_metadata_is_consistent():
+    from quibble import __version__
+
+    metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'version = "{__version__}"' in metadata
+    readme = TEXT[ROOT / "README.md"]
+    assert f"Status: v{__version__} pre-release" in readme
+    assert f"/releases/tag/v{__version__}" in readme
+    for path in (ROOT / "README.md", ROOT / "docs" / "README.md", ROOT / "docs" / "about.md"):
+        assert "unreleased" not in TEXT[path].lower()
+
+
 def test_standalone_docs_and_current_browser_actions():
     home = TEXT[ROOT / "docs" / "README.md"]
     assert "[Getting started](getting-started.md)" in home

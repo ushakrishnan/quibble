@@ -75,7 +75,8 @@ metrics, and reporting still use CPU. See [backends](backends.md) and
 
 ## Version, license, and status
 
-The local About page displays the running package version. Quibble is unreleased;
+The local About page displays the running package version. Quibble v0.0.1 is an
+experimental pre-release;
 the distribution name is `quibble-ml`, and its command/import name is `quibble`.
 Install from source using [Getting started](getting-started.md).
 

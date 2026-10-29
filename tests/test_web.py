@@ -308,6 +308,8 @@ def test_http_origin_token_and_path_boundaries(app):
         assert about.headers["Content-Type"] == "text/html; charset=utf-8"
         about_html = about.read().decode()
         assert f"Version {__version__}" in about_html
+        assert "Pre-release" in about_html
+        assert "unreleased" not in about_html.lower()
         assert "__QUIBBLE_VERSION__" not in about_html
         assert server.token not in about_html
         assert "Version" not in about_html.split("<header>", 1)[1].split("</header>", 1)[0]
