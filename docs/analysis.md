@@ -14,11 +14,11 @@ reported as missing/failed, not treated as competitors. The model seed defaults 
 ## Output files
 | File | Contents |
 |---|---|
-| `summary.csv` | One row per backend: primary metric, `ci_lo`, `ci_hi`, `split_std`, plus secondary metrics |
+| `summary.csv` | One row per backend: primary metric, `ci_lo`/`ci_hi` (test-set noise), `cv_lo`/`cv_hi` (also counts retraining variability; 5+ splits), `split_std`, `n_seeds`, `seed_std`, `reseed_disagreement`, plus secondary metrics |
 | `calibration.csv` | Classification only: reliability table (10 bins) per backend |
 | `slices.csv` | Primary metric per slice and backend, with the spread between backends |
 | `disagreements_<a>_vs_<b>.csv` | Every disputed prediction pair, with row traits and the row's features |
-| `analysis.json` | Machine-readable summary of all of the above |
+| `analysis.json` | Machine-readable summary of all of the above, plus `data_flags` and the split scheme |
 | `swap_<a>_to_<b>.json` | Written by `quibble swap` |
 
 ## Metrics
@@ -35,18 +35,30 @@ Primary metric: `accuracy` for classification, `rmse` for regression (override w
 | `r2` | 1 - SSE / total sum of squares | higher |
 
 ## Confidence intervals
-- Method: **cluster bootstrap over unique data rows.** Each resample draws row weights from a
-  multinomial; a row that appears in several CV repeats keeps one weight. Metrics are recomputed with
-  those weights. The interval is the 2.5th to 97.5th percentile of `QUIBBLE_BOOT` resamples
-  (default 500).
+- `ci_lo`, `ci_hi`: **cluster bootstrap.** Each resample draws weights from a multinomial over
+  units; the unit is a unique data row, or a whole group when the dataset declares `group_column`, so
+  correlated rows are never treated as independent. A row that appears in several CV repeats keeps
+  one weight. The interval is the 2.5th to 97.5th percentile of `QUIBBLE_BOOT` resamples
+  (default 500). It captures **test-set sampling noise only**.
+- `cv_lo`, `cv_hi`: a Nadeau-Bengio corrected resampled interval over the per-split values. It
+  inflates the variance by `1/J + n_test/n_train` because CV training sets overlap, so it also
+  counts **retraining variability**. It needs 5 or more splits; otherwise it is `NaN`. Use
+  whichever is wider for decisions.
 - The resampling seed is fixed, so results are reproducible and *paired*: two backends are compared
   on identical resamples.
-- With fewer than 20 valid resamples (e.g. an AUC that cannot be computed) the interval is `NaN`.
-- **What it captures:** test-set sampling noise.
-  **What it does not:** variability from retraining on different training sets. `split_std`, the
-  standard deviation of the primary metric across splits, gives a rough sense of that.
+- Resamples with an undefined metric (for example an AUC where a resample has one class) are dropped
+  and counted. With fewer than 20 valid resamples the bootstrap interval is `NaN`, and swap treats
+  that as INCONCLUSIVE.
+- `split_std` is the standard deviation of the primary metric across splits.
 - Marginal interval overlap alone neither decides a paired difference nor proves equality.
   Use the paired degradation interval from a swap check and application-specific limits.
+
+## Seeds
+With two or more model seeds saved for a backend, the summary adds `seed_std` (spread of the primary
+metric across seeds) and `reseed_disagreement` (how often two seeds of the same backend disagree).
+The latter is the noise floor for any candidate-versus-incumbent disagreement, and swap subtracts it.
+The main analysis still uses one seed (`--model-seed`, default the smallest found). Backends that do
+not control their seed (AutoGluon) are recorded with `seed_controlled: false`.
 
 ## Calibration
 `ece` is a single number; `calibration.csv` has the bins (`bin`, `n`, `mean_conf`, `accuracy`). A
@@ -57,11 +69,15 @@ the top-label confidence only.
 Slices show whether an average hides a weak segment. Defined on the full dataset (diagnostic only):
 - `missing=none` / `missing=some`: rows with no missing values vs at least one.
 - `rare_category=yes`: rows containing a category value seen in under 1% of rows.
-- For the three numeric features most correlated (absolute Pearson) with the target: `feature=low`,
-  `=mid`, `=high` (terciles).
+- For the three numeric features with the highest **mutual information** with the target:
+  `feature=low`, `=mid`, `=high` (terciles). Mutual information needs no ordering of class labels
+  and does not assume a linear relationship.
 
-A slice is reported only if it has at least `--min-slice-n` pooled predictions (default 30; note that
-CV repeats count a row once per repeat). `spread` is the best minus the worst backend on that slice.
+A slice is reported only if it has at least `--min-slice-n` **distinct rows** (default 30; a row
+predicted in several CV repeats counts once). `n` in `slices.csv` is that row count. `spread` is the
+best minus the worst backend on that slice. Slices are **exploratory**: they are chosen using the
+target and ranked by spread between backends, so a large spread in a small slice is often noise.
+`slices.csv` has no intervals. The swap check's worst-slice interval is the rigorous version.
 
 ## Disagreement
 For every pair of backends:
@@ -90,3 +106,17 @@ rare_category`, then `x_<name>`.
 - *Point estimates are similar but disputes are common:* similar observed average quality,
   different behavior. Inspect the paired quality difference and disputed-row CSV.
 - *One model wins on a slice but loses overall:* the average is hiding a segment that matters.
+
+## Data flags
+Before reporting, quibble runs cheap checks and prints `DATA FLAG` lines, saved as `data_flags` in
+`analysis.json` and shown with swap and gate results. They never block a run or change a verdict.
+
+| Flag | Meaning |
+|---|---|
+| `single_feature_predicts_target` | a depth-3 tree on one feature scores about perfectly (AUC or accuracy at least 0.99, R^2 at least 0.98). Check the feature is known at prediction time and not derived from the target |
+| `id_like_column` | almost every value is unique; an ID can let a model memorise rows |
+| `duplicate_rows` | at least 5% of rows have identical features; duplicates can land on both sides of a split |
+| `time_like_column_random_split` | the column name suggests dates or time, but the split is random. Declare `time_column` and use a temporal split |
+
+These are heuristics: silence does not prove there is no leakage, and a flag is a prompt to
+investigate. See [Testing your own data](testing-your-data.md#group-and-temporal-splits).

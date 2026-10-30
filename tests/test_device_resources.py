@@ -45,7 +45,7 @@ def test_backend_filtering_preserves_model_identity(device):
         assert included == names and excluded == {}
     else:
         assert included == ["catboost", "tabpfn", "tabfm", "kumo_tabular"]
-        assert set(excluded) == {"histgb", "weak", "lightgbm", "autogluon"}
+        assert set(excluded) == {"histgb", "weak", "lightgbm", "autogluon", "dummy", "linear"}
         assert all(excluded.values())
 
 

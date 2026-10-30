@@ -424,6 +424,20 @@ Smoke uses the established 128-training/32-test maximum and is not a swap approv
 Full runs use `holdout`, `3x1`, or `3x2`, fixed model seed 0, and one fit worker.
 One experiment can run at a time; each gets an isolated output directory.
 
+For full runs, expand **Swap acceptance policy (full runs)** to inspect the
+[packaged defaults](../quibble/swap_thresholds.json). These are the limits Quibble uses,
+not universally safe acceptance criteria. Choose **Custom policy** to edit JSON or import
+a local JSON file. Omitted keys retain defaults; the preview shows the merged effective limits.
+The server rejects invalid policies before training. **Reset to defaults** discards edits,
+and **Download effective policy** saves a reusable copy. Smoke runs disable these controls
+and do not save or evaluate a swap policy.
+
+Each full job saves its effective settings and default/custom designation. Reopen its
+**Saved swap acceptance policy** to inspect or download the exact saved values. A later
+run does not automatically inherit them; import the saved JSON or select defaults explicitly.
+Reports include all effective settings alongside swap results.
+See [Swap checks](swap.md#changing-the-limits) for units and CLI policy options.
+
 Read [what Full does and what the results establish](running-benchmarks.md#what-full-does-and-what-the-results-establish)
 for the split, training-only preprocessing, fitting, held-out prediction, analysis, and
 reporting sequence. The page also explains why fast `fit()` does not imply fast inference,
@@ -441,6 +455,7 @@ triggers a CPU retry. Existing reports retain their original device records.
 ```text
 results/web/<job-id>/
   job.json
+  thresholds.json                         effective policy, full runs only
   run.log
   output/report/report.md                 full report
   output/smoke/<smoke-id>/report/report.md  smoke report

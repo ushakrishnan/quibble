@@ -69,10 +69,11 @@ values, rare categories, near the decision boundary, extreme target) are over-re
 disputes. The disputed rows are exported as CSV with their features so you can look at them.
 
 ## Statistics in one paragraph
-Intervals come from a **cluster bootstrap over data rows**: rows are resampled, and a row that
-appears in several CV repeats is resampled as one unit. This captures test-set sampling noise. It
-does **not** capture variation from retraining on different training sets, which is why the analysis
-also reports `split_std` (spread across splits). Marginal confidence-interval overlap alone
+Intervals come from a **cluster bootstrap over data rows** (or whole groups, when the dataset
+declares a group column): a row that appears in several CV repeats is resampled as one unit. This
+captures test-set sampling noise. It does **not** capture variation from retraining on different
+training sets. With 5 or more splits the analysis also reports a corrected interval over splits
+(`cv_lo`, `cv_hi`) that does, and swap uses the wider of the two; `split_std` is the raw spread. Marginal confidence-interval overlap alone
 does not decide a paired difference or establish equivalence. Use paired swap checks with
 meaningful limits. Details in [Analysis](analysis.md).
 

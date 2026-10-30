@@ -6,11 +6,13 @@
 [![CPU and CUDA](https://img.shields.io/badge/Compute-CPU%20%7C%20CUDA-76B900?logo=nvidia&logoColor=white)](docs/gpu-and-docker.md)
 [![Status: v0.0.1 pre-release](https://img.shields.io/badge/Status-v0.0.1%20Pre--release-f59e0b)](https://github.com/ushakrishnan/quibble/releases/tag/v0.0.1)
 
-**Compare ways to predict from your data. See which answers change, and at what cost.**
+**Before you swap a tabular model, see exactly what changes.**
 
 Suppose you have historical invoices and know which were paid late. You want to predict
 late payment for new invoices, using only information available before the outcome.
-Which prediction method should you use, and what changes if you choose another?
+Which prediction method should you use, and what changes if you choose another? Quibble
+answers that with paired evidence, row-level disagreements, measured cost, and a
+PASS / FAIL / INCONCLUSIVE verdict you can put in CI.
 
 Quibble compares methods on the same held-out examples, checks their answers against known
 outcomes, and reports disagreements, prediction quality, and measured execution costs.
@@ -23,7 +25,7 @@ tables to a new prediction task.
 **Could ChatGPT do this too?** It can analyze CSVs, attempt predictions, or use tools to
 run statistical methods. The distinction is not the file format: it is whether the
 predictions are tested on held-out outcomes under defined rules. Quibble does not yet
-include a chat-LLM comparison; see the [scope and proposed evaluation](<docs/quibble why, what, and what it isn't.md#could-chatgpt-predict-from-the-same-csv>).
+include a chat-LLM comparison; see the [scope and proposed evaluation](docs/rationale.md#could-chatgpt-predict-from-the-same-csv).
 
 [Quick start](#quick-start) | [Web workbench](docs/experiment-workbench.md) | [Your data](#test-your-own-data) | [Models and workflows](#recommended-comparison-workflows) | [Reports](#results-reuse-and-history) | [Documentation](#documentation)
 
@@ -62,14 +64,15 @@ flow; the [report guide](docs/reports.md) explains the evidence and its limits.
 
 | Look beyond the score | What you get |
 |---|---|
-| Quality and uncertainty | Confidence intervals, calibration, and weak slices |
+| Quality and uncertainty | Intervals for test-set noise, a wider interval that also counts retraining variability (5+ splits), calibration, and weak slices |
 | Prediction-level differences | Disputed rows, who was right, and shared row traits |
 | Real execution costs | Fit time, prediction latency, memory, errors, and refusals |
-| Replacement decisions | PASS / FAIL / INCONCLUSIVE checks with configurable limits and CI exit codes |
+| Replacement decisions | PASS / FAIL / INCONCLUSIVE checks with configurable limits and CI exit codes; `quibble gate` asks whether a model beats a simple baseline at all |
+| Data checks | Flags for near-perfect single features, ID-like columns, duplicate rows, and time-like columns on a random split; group and temporal splits for local data |
 | Reproducible evidence | Saved predictions, source fingerprints for local data, dated reports, and explicit device labels |
 
 It is a comparison and verification tool, not a tuner, model server, or deployment platform.
-See the [project rationale](<docs/quibble why, what, and what it isn't.md>) for the scope and motivation.
+See the [project rationale](docs/rationale.md) for the scope and motivation.
 
 ## Quick start
 
@@ -79,7 +82,7 @@ Use Python 3.13 for this Windows setup; the full requirements need Python 3.11+.
 Run from Quibble's root. If another virtual environment is active, run `deactivate` first.
 
 ```powershell
-# Requires uv. Reuse an existing local .venv rather than creating another environment.
+# Requires uv. Creates .venv only if it does not exist yet.
 if (-not (Test-Path .\.venv\Scripts\python.exe)) {
     uv venv --python 3.13 --seed .venv
 }
@@ -91,12 +94,23 @@ python -m pip check
 python -m quibble doctor
 ```
 
+Linux and macOS (Python 3.11 or newer; CUDA builds of PyTorch are Windows-only in `requirements.txt`):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --no-deps -e .
+python -m pip check
+python -m quibble doctor
+```
+
 <details>
 <summary>Environment requirements, CUDA wheels, and maintenance</summary>
 
 - The interpreter must end in `quibble\.venv\Scripts\python.exe`.
 - Use only this local `.venv` and `requirements.txt`. Requirements include model libraries,
-  report/notebook dependencies, and pytest; the editable install registers local Quibble
+  report dependencies, and pytest; the editable install registers local Quibble
   without choosing another dependency set.
 - In later shells, activate the same `.venv`. After requirements change, repeat both install
   commands and `pip check`. Never update packages while a sweep is running.
@@ -360,8 +374,7 @@ from the project root, independent of the shell's working directory:
   QUIBBLE_TRANSFORMERS_CACHE_DIR=.cache\huggingface\hub
   ```
 
-- These are Quibble's equivalents of LTMStarter's `LTM_*` cache settings. No other project's
-  environment or cache is required.
+- No other project's environment or cache is required.
 - `QUIBBLE_DATA_HOME` overrides OpenML's location; blank follows `QUIBBLE_CACHE_DIR/openml`.
 - Quibble overrides inherited library cache variables so an old shell does not scatter downloads.
   Transformers shares the Hugging Face hub by default to avoid duplicate weights.
@@ -446,9 +459,10 @@ they are dataset-specific recommendations, not guarantees. A swap FAIL is not an
 |---|---|
 | `quibble demo` | Offline CPU demonstration; optional `--backends` and `--force` |
 | `quibble benchmark` | Device-aware presets, `--smoke`, optional `--keep-models` |
-| `quibble run --sweep --backends a,b --datasets x,y` | One worker process per model/dataset/split/seed |
+| `quibble run --sweep --backends a,b --datasets x,y` | One worker process per model/dataset/split/seed; `--retry-failed` reruns only errors |
 | `quibble analyze --dataset x` | Intervals, calibration, slices, disputed-row CSVs |
-| `quibble swap --incumbent A --candidate B --dataset x` | Replacement verdict; exit codes 0 / 1 / 2 |
+| `quibble swap --incumbent A --candidate B --dataset x` | Replacement verdict; exit codes 0 / 1 / 2; `--require-thresholds` requires an explicit policy |
+| `quibble gate --candidate B --dataset x` | Does B beat a simple baseline (`linear`, `dummy`)? Exit codes 0 / 1 / 2 |
 | `quibble report --swap A:B` | Markdown report and figures |
 | `quibble compare --dataset x` | Quick single-split summary across model seeds |
 | `quibble datasets --verify --names credit-g,phoneme` | Verify selected OpenML entries before use |
@@ -483,14 +497,26 @@ device differences, and policy-limit failures.
   Effective settings are recorded; compare preprocessing modes in isolated roots.
 - Timings are single-machine measurements. Use `--jobs 1`; process peak RSS and PyTorch-only
   peak VRAM do not describe the same memory pool or every library's GPU allocations.
-- Bootstrap intervals cluster repeated predictions by original row. They measure test-row noise,
-  not full retraining variability; inspect `split_std` too. Marginal interval overlap alone
-  does not decide a paired difference or establish equivalence.
-- Swap intervals PASS when wholly within a limit, FAIL when wholly beyond, otherwise remain
-  INCONCLUSIVE. Missing intervals fall back to point checks; latency/memory also use points.
-- Worst-slice checks are not multiple-comparison corrected. Tune placeholder swap limits using
-  `--thresholds swap_thresholds.example.json`.
-- Disputed predictions differ in class, or by more than 0.25 target standard deviations for regression.
+- Bootstrap intervals cluster repeated predictions by original row (or by group when the
+  dataset declares `group_column`). They measure test-row noise. With 5 or more splits, swap
+  also computes a Nadeau-Bengio corrected interval over splits that counts retraining
+  variability, and uses the wider of the two. Marginal interval overlap alone does not decide a
+  paired difference or establish equivalence.
+- Swap checks PASS when the whole interval is within a limit, FAIL when wholly beyond, otherwise
+  INCONCLUSIVE. A check with no usable interval is INCONCLUSIVE, never PASS. Latency and memory
+  compare medians and memory compares the model's increase over the process baseline.
+- The worst-slice interval covers the maximum over all slices. Swap defaults live in the
+  packaged [swap_thresholds.json](quibble/swap_thresholds.json), shared by the CLI and UI.
+  These are the limits Quibble uses, not universally safe acceptance criteria.
+  Export a copy with `quibble swap --export-thresholds my_limits.json`, edit it, and pass
+  `--thresholds my_limits.json`. Use `--require-thresholds` in CI.
+  In the workbench, choose a full run and open **Swap acceptance policy (full runs)** to
+  review defaults, edit or import custom JSON, and download the effective policy.
+  Full experiments save their policy; reports show all effective limits.
+  See [Swap checks](docs/swap.md#changing-the-limits) for units, validation, and examples.
+- With 2 or more model seeds, the disagreement check subtracts the incumbent's own seed-to-seed
+  disagreement. Disputed predictions differ in class, or by more than `regression_gap_std` (default
+  0.25) target standard deviations for regression.
 
 </details>
 
@@ -525,8 +551,9 @@ python -m pytest
 <details>
 <summary>Validation coverage, CI, Docker, and release status</summary>
 
-- The CI definition targets Python 3.10 to 3.12 using the smaller package development extras,
-  not the full local requirements. Remote CI execution is unverified.
+- The CI definition targets Python 3.10 to 3.13 on Linux plus Python 3.13 on Windows, installing
+  `.[dev]` (everything the tests import) but not the heavy model backends. It has not yet run
+  remotely; the same steps pass locally on Linux with Python 3.12.
 - Docker entry points use modules, for example `docker compose run --rm cpu quibble.doctor`.
   Containers run as UID/GID 1000 and remain unvalidated; see [GPU and Docker](docs/gpu-and-docker.md).
 - Evaluation, analysis, swap checks, and reporting are implemented. The package is not published; its distribution name is
@@ -537,7 +564,9 @@ python -m pytest
   need validation. See [current trust levels](docs/index.md#trust-levels-what-has-actually-been-run).
 - Hosted services are deferred. Remaining work includes the verified multi-dataset benchmark,
   release validation, final attribution, and reviewed benchmark configurations.
-- Recommend/abstain and leakage guards are design proposals, not shipped APIs.
+- Shipped: leakage and data flags, group and temporal splits for local data, simple baselines
+  (`dummy`, `linear`), and `quibble gate`. Still proposed: a Python `recommend()` API and
+  license-aware selection; see [recommend and abstain](docs/recommend-abstain.md).
 - The [synthetic experiment workbench](docs/experiment-workbench.md) supports bounded
   independent-row generation; it does not validate domain realism. The configured planner drafts the
   specification, not the evaluated predictions. Controlled LLM prediction comparison

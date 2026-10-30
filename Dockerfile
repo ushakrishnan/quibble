@@ -2,13 +2,13 @@
 FROM pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g ${GID} ushak && useradd -m -u ${UID} -g ${GID} ushak
+RUN groupadd -g ${GID} quibble && useradd -m -u ${UID} -g ${GID} quibble
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 # Requirements include all model backends and may replace the base image's Torch build.
-COPY --chown=ushak:ushak . .
-USER ushak
+COPY --chown=quibble:quibble . .
+USER quibble
 ENV QUIBBLE_DATA_HOME=/app/.cache/openml
 ENTRYPOINT ["python", "-m"]
 CMD ["quibble.doctor"]

@@ -9,6 +9,11 @@ Everything quibble produces is a plain file, so results can be inspected, diffed
 re-analyzed without retraining. Slice/trait analysis reloads the original dataset; saved
 predictions alone are not a complete replacement for its source/cache.
 
+Browser experiments also save `results/web/<job-id>/job.json` and, for full runs,
+`thresholds.json`. The job record's `thresholds` contains the complete effective policy;
+`thresholds_default` identifies default versus custom selection. Both are null for smoke runs.
+Saved policies remain available when reopening an experiment after a restart.
+
 ## Layout
 
 ```text
@@ -19,7 +24,7 @@ predictions alone are not a complete replacement for its source/cache.
     y_test_ss<split>.npy                 true test targets for that split
     idx_test_ss<split>.npy               test row positions in the loaded dataset
     analysis/                            written by `quibble analyze` / `swap`
-      summary.csv  calibration.csv  slices.csv  analysis.json
+      summary.csv  calibration.csv  slices.csv  analysis.json   (analysis.json carries data_flags)
       disagreements_<a>_vs_<b>.csv
       swap_<incumbent>_to_<candidate>.json
   report/
@@ -73,10 +78,14 @@ A real example (environment block omitted):
 | `preprocess_requested` / `preprocess_effective` | categorical rule asked for vs. applied |
 | `threads`, `jobs` | threading and sweep parallelism; `jobs > 1` means timings are indicative only |
 | `task`, `n_train`, `n_test` | task type and split sizes |
-| `fit_s` | wall-clock seconds to fit |
+| `fit_s` | wall-clock seconds spent fitting, excluding pretrained-weight loading |
+| `load_s`, `fit_total_s` | seconds spent building the model (loading pretrained weights) and the total of load plus fit |
 | `predict_ms_per_row_batch` | milliseconds per row when predicting the whole test set |
 | `single_row_p50_ms`, `single_row_p95_ms` | latency percentiles over `QUIBBLE_SINGLE_N` single-row predictions |
-| `peak_rss_mb` | process peak resident memory in decimal MB (high-water mark for that process) |
+| `peak_rss_mb` | process peak resident memory in decimal MB (high-water mark for that process, including interpreter and imports) |
+| `rss_before_fit_mb`, `peak_rss_increase_mb` | resident memory just before fitting, and the peak minus that (the model's own footprint); absent when the system cannot report current memory |
+| `single_n`, `seed_controlled`, `backend_verification` | latency sample size used; whether the model seed makes training reproducible (`false` for AutoGluon); the adapter's verification label at run time |
+| `tabpfn_max_rows` | TabPFN only: the configured row limit, so a changed limit is detected on reuse |
 | `peak_torch_vram_mb` | CUDA-attempted backend only: peak PyTorch allocation in that process (not non-Torch libraries) |
 | `accuracy`, `log_loss`, `brier`, `auc` | classification metrics |
 | `rmse`, `mae`, `r2` | regression metrics |
@@ -117,7 +126,9 @@ rows as in `summary.csv`), optional local `dataset_source`, and `pairs`, keyed `
 | `csv` | file name of the disputed-rows CSV |
 
 ## `swap_*.json`
-`overall` (`PASS`/`FAIL`/`INCONCLUSIVE`), `thresholds` (the limits used) and `checks`, a list of
+`overall` (`PASS`/`FAIL`/`INCONCLUSIVE`), `thresholds` (the complete effective limits),
+`thresholds_default` (true for implicit packaged defaults, false for a non-empty supplied policy),
+and `checks`, a list of
 `{check, observed, limit, verdict, note}`.
 
 ## Sizes and version control

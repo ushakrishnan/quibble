@@ -6,7 +6,7 @@ description: Generated report structure, evidence-based interpretation, figures,
 ## Reports
 
 ```bash
-quibble report [--out results] [--datasets a,b] [--swap histgb:lightgbm] [--thresholds limits.json]
+quibble report [--out results] [--datasets a,b] [--swap histgb:lightgbm] [--thresholds limits.json] [--require-thresholds]
 ```
 Writes `<out>/report/report.md` plus PNG figures next to it. Datasets default to every folder under
 `--out` that contains results. `--swap INCUMBENT:CANDIDATE` can be repeated and is evaluated for each
@@ -36,7 +36,8 @@ a note says the figures were skipped.
      otherwise "none notable"), and a link to the CSV of disputed rows,
    - **Calibration** (classification): reliability curves (`fig_<dataset>_calibration.png`),
    - **Slices:** the five slices with the largest spread between backends,
-   - **Swap check** sections, if requested.
+   - **Swap check** sections, if requested, with the default/custom policy source and a table
+     of all effective settings, including defaults inherited from omitted custom keys.
 3. **What failed or refused:** a backend x dataset matrix. Cells read `ok n/n`, `refused k/n: <reason>`
    or `error k/n: <message>`, with `(m ok)` when some runs succeeded. This compact matrix
    prioritizes refusals over errors when both occur; the participation and detailed failure
@@ -78,13 +79,18 @@ swap verdict, shortlists do not approve a replacement.
 
 Recommendations apply only to the measured dataset and hardware. Marginal confidence-interval
 overlap alone does not establish equivalence or decide the paired difference; use paired swap
-checks. Intervals capture test-row sampling, not full retraining variability. Validate against
+checks. Bootstrap intervals capture test-row sampling; the corrected split interval, available with
+5 or more splits, also counts retraining variability. Validate against
 representative application data, deployment budgets, and meaningful swap thresholds before use.
 
 ## Regenerating
 The report reuses saved predictions and records, so adding a `--swap` or changing thresholds
 does not retrain models. Analysis also reloads the original dataset for traits and slices;
 an absent OpenML cache can require network access even during report generation.
+Pass the same `--thresholds` file when regenerating to preserve your policy; it is not
+auto-discovered. Without it, reports use the [packaged defaults](../quibble/swap_thresholds.json).
+`--require-thresholds` rejects a missing or empty policy before writing a report.
+Browser full runs save an effective policy beside their job record for reuse.
 Demo and report share the same results root, defaulting to `results`. Every report generation
 saves a dated snapshot under `<out>/runs/YYYY-MM-DD/<snapshot-id>/` containing the report,
 figures, and generated dataset evidence (records, prediction/target/index arrays, and analysis).

@@ -19,6 +19,7 @@ from .backends import BACKENDS
 from .config import analysis_settings
 from .history import snapshot
 from .swap import SwapError, evaluate
+from .thresholds import DEFAULT_SOURCE, load_thresholds, resolve_thresholds
 
 MORE_BETTER = {"accuracy", "auc", "r2"}
 
@@ -400,7 +401,9 @@ def pair_rows(res, rdir):
     return pd.DataFrame(rows)
 
 
-def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), thresholds=None):
+def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), thresholds=None,
+          require_thresholds=False):
+    resolve_thresholds(thresholds, require_thresholds)
     S = analysis_settings()
     out = Path(out or S["out_dir"])
     rdir = Path(report_dir or out / "report")
@@ -506,12 +509,20 @@ def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), t
             try:
                 if inc not in res["backends"] or cand not in res["backends"]:
                     raise SwapError("Both models must have compatible, usable predictions in this analysis")
-                r = evaluate(ds, inc, cand, res["model_seed"], out, thresholds)
+                r = evaluate(ds, inc, cand, res["model_seed"], out, thresholds, require_thresholds)
                 swap_results.append((inc, cand, r))
                 ct = pd.DataFrame([{"verdict": c["verdict"], "check": c["check"],
                                     "observed": c["observed"], "limit": c["limit"]}
                                    for c in r["checks"]])
                 md.append(f"### Swap check: {inc} -> {cand}: **{r['overall']}**\n\n{md_table(ct)}\n")
+                source = f"Packaged defaults (`{DEFAULT_SOURCE}`)" if r["thresholds_default"] else (
+                    "Custom policy; omitted keys use packaged defaults")
+                md.append(f"{source}. Review these limits for your application; "
+                          "PASS is not a production-safety guarantee.\n")
+                policy = pd.DataFrame([{"setting": key, "value": json.dumps(value)}
+                                       for key, value in r["thresholds"].items()])
+                md.append("Effective swap thresholds (`primary: null` selects accuracy for "
+                          f"classification or RMSE for regression):\n\n{md_table(policy)}\n")
             except SwapError as e:
                 md.append(f"### Swap check: {inc} -> {cand}\n\nnot possible: {e}\n")
         md.insert(1, interpretation(res, cost, selected_runs, swap_results, smoke=smoke))
@@ -596,11 +607,16 @@ def main():
     ap.add_argument("--model-seed", type=int)
     ap.add_argument("--swap", action="append", default=[], help="INCUMBENT:CANDIDATE (repeatable)")
     ap.add_argument("--thresholds", help="JSON file for swap limits")
+    ap.add_argument("--require-thresholds", action="store_true",
+                    help="require an explicit non-empty swap policy")
     a = ap.parse_args()
     swaps = [tuple(s.split(":", 1)) for s in a.swap]
-    thr = json.loads(Path(a.thresholds).read_text()) if a.thresholds else None
-    path = build(a.out, a.datasets.split(",") if a.datasets else None, a.report_dir,
-                 a.model_seed, swaps, thr)
+    try:
+        thr = load_thresholds(a.thresholds) if a.thresholds else None
+        path = build(a.out, a.datasets.split(",") if a.datasets else None, a.report_dir,
+                     a.model_seed, swaps, thr, a.require_thresholds)
+    except ValueError as exc:
+        ap.error(str(exc))
     print(f"wrote {path}")
 
 

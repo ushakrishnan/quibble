@@ -84,6 +84,39 @@ def test_benchmark_rejects_invalid_selections_before_running(settings, monkeypat
     mock.assert_not_called()
 
 
+def test_benchmark_passes_explicit_policy_and_requirement_to_report(settings, monkeypatch):
+    limits = settings / "policy.json"
+    limits.write_text('{"max_quality_drop": 0.02}', encoding="utf-8")
+    monkeypatch.setattr(benchmark, "sweep", Mock(return_value={"cells": []}))
+    build = Mock(return_value=settings / "report.md")
+    monkeypatch.setattr(report, "build", build)
+    monkeypatch.setattr(sys, "argv", ["quibble benchmark", "--backends", "histgb",
+                                    "--thresholds", str(limits), "--require-thresholds"])
+    assert benchmark.main() == 0
+    assert build.call_args.kwargs["thresholds"] == {"max_quality_drop": 0.02}
+    assert build.call_args.kwargs["require_thresholds"] is True
+
+
+@pytest.mark.parametrize("text,flags", [
+    ("{}", ["--require-thresholds"]),
+    ("[]", []),
+    ('{"max_quality_drop": -Infinity}', []),
+    ('{"primary": "rmse"}', []),
+    ('{"max_quality_drop": 0.02}', ["--smoke"]),
+])
+def test_benchmark_rejects_invalid_policy_before_training(settings, monkeypatch, text, flags):
+    limits = settings / "policy.json"
+    limits.write_text(text, encoding="utf-8")
+    run = Mock()
+    monkeypatch.setattr(benchmark, "sweep", run)
+    monkeypatch.setattr(sys, "argv", ["quibble benchmark", "--backends", "histgb",
+                                    "--thresholds", str(limits), *flags])
+    with pytest.raises(SystemExit) as exc:
+        benchmark.main()
+    assert exc.value.code == 2
+    run.assert_not_called()
+
+
 @pytest.mark.parametrize("cv", ["1x1", "3x0", "-2x1"])
 def test_invalid_fold_counts_are_configuration_errors(settings, monkeypatch, capsys, cv):
     monkeypatch.setattr(sys, "argv", ["quibble benchmark", f"--cv={cv}"])

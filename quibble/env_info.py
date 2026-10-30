@@ -65,10 +65,28 @@ def collect(with_gpu=False):
     return d
 
 
+def conflicting_distributions():
+    """Another PyPI project named plain `quibble` installs the same import name."""
+    found = []
+    for dist in metadata.distributions():
+        name = (dist.metadata["Name"] or "").lower().replace("_", "-")
+        if name == "quibble":
+            found.append(dist.version)
+    return found
+
+
 def main():
     info = collect(with_gpu=True)
     for k, v in info.items():
         print(f"{k}: {v}")
+    from .backends import BACKENDS
+    print("\nbackend verification (what has actually been run):")
+    for name, B in BACKENDS.items():
+        print(f"  {name:13s} {B.verification}")
+    if conflicting_distributions():
+        print("\nWARNING: another distribution named 'quibble' is installed. It provides the same "
+              "import name and command as quibble-ml and can shadow it. Uninstall it, or use a "
+              "separate environment.")
     g = info.get("gpu")
     print()
     if not g:

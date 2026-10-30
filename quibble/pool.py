@@ -18,6 +18,16 @@ def load_pool(out, dataset, backend, ms):
     return splits, runs
 
 
+def seeds_available(out, dataset, backend):
+    """Model seeds that have saved results for this backend and dataset, ascending."""
+    seeds = set()
+    for p in (Path(out) / dataset).glob(f"{backend}_ss*_ms*.json"):
+        tail = p.stem.rsplit("_ms", 1)[-1]
+        if tail.isdigit() and p.stem.startswith(f"{backend}_ss"):
+            seeds.add(int(tail))
+    return sorted(seeds)
+
+
 def align(pools):
     """Keep only splits every backend completed; stack them. Row order is identical across
     backends because a split id fixes the test rows."""

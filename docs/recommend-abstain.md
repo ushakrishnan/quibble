@@ -1,6 +1,6 @@
 ---
 title: "Quibble: recommend and abstain layer"
-description: Proposed baseline gates, abstention, calibration, licensing, and leakage caveats; not implemented.
+description: Baseline gates and data flags (shipped) and the proposed recommend() API, calibration and licensing checks (not implemented).
 ---
 
 ## Quibble: recommend and abstain layer
@@ -8,10 +8,14 @@ description: Proposed baseline gates, abstention, calibration, licensing, and le
 Proposed extension to the current evidence-based comparison workflow.
 
 > [!IMPORTANT]
-> Proposed work, not an implemented API. Current reports provide measured shortlists and
-> swap checks, but there is no public `quibble.compare()`/`quibble.recommend()` interface,
-> automatic baseline-abstain decision, leakage guard, or license-aware selection.
-> See [current report behavior](reports.md) and [implementation status](project-plan.md).
+> Partly implemented. Shipped: [`quibble gate`](cli-reference.md#quibble-gate) (does a model beat a
+> `dummy` or `linear` baseline by a chosen margin, with an interval-backed verdict and an
+> INCONCLUSIVE outcome), [data flags](analysis.md#data-flags) (single-feature leakage, ID-like columns,
+> duplicates, time-like columns on a random split), and group and temporal splits for local data.
+> Still proposed, and described below: a Python `compare()` / `recommend()` interface that picks one
+> backend or abstains across many candidates, a calibration-fix check, small-sample and class-imbalance
+> caveats, and license-aware selection. See [current report behavior](reports.md) and
+> [implementation status](project-plan.md).
 
 ## Why this exists
 
@@ -43,6 +47,8 @@ the same validated tables as the existing comparison workflow.
 
 ## Illustrative interface, not implemented
 
+The gate command covers rule 1 below for one candidate at a time.
+
 ```python
 result = quibble.compare(dataset, target="invoice_paid_late", task="classification")
 rec = quibble.recommend(result)
@@ -59,7 +65,7 @@ This is a proposed design, not existing code.
 
 Rules run in order. The first that fires decides.
 
-1. **Baseline gate.** A backend is eligible only if it beats the baseline on the primary metric by at least a minimum margin, and the paired bootstrap interval on the difference excludes zero. Primary metric: log loss or AUC for classification, MAE or RMSE for regression. Make the margin and interval level configurable, with conservative defaults.
+1. **Baseline gate** (shipped as `quibble gate`). A backend is eligible only if it beats the baseline on the primary metric by at least a minimum margin, and the paired bootstrap interval on the difference excludes zero. Primary metric: log loss or AUC for classification, MAE or RMSE for regression. Make the margin and interval level configurable, with conservative defaults.
 2. **Abstain.** If no backend passes the baseline gate, return `abstain` with the observed reason. Distinguish insufficient evidence from no useful measured improvement; do not infer no signal or leakage from a failed significance gate alone.
 3. **Tie-break by simplicity.** Among eligible backends meeting a defined practical-equivalence rule, prefer the simpler, faster and cheaper one. Failure to detect a difference alone does not establish equivalence.
 4. **Calibration check.** For classification, if the winner's probabilities are poorly calibrated and a cheap recalibration fixes it, say so. If not, add a caveat.
@@ -108,4 +114,4 @@ than convert a relative ranking into a claim of useful predictive performance.
 - Whether to bootstrap over rows or use cross-validation folds when the dataset is small.
 - How to present abstain so it reads as a useful result, not a failure.
 
-Related: [project rationale](<quibble why, what, and what it isn't.md>).
+Related: [project rationale](rationale.md).

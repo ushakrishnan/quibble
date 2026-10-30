@@ -38,7 +38,7 @@ python -m quibble doctor
 ```
 
 `requirements.txt` is the dependency list for this setup. It includes all supported model
-libraries, matplotlib for report figures, Jupyter, and pytest. TabFM explicitly selects its
+libraries, matplotlib for report figures, and pytest. TabFM explicitly selects its
 PyTorch extra. No other project's environment or cache is required.
 The interpreter should be the checkout's `.venv\Scripts\python.exe`. After requirements
 change, repeat both install commands and `pip check`; do not update a running sweep's

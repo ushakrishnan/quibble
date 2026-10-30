@@ -5,7 +5,7 @@ description: Guides, supported workflows, validation status, and future design n
 
 ## Quibble documentation
 
-*See where your models quibble.*
+*Before you swap a tabular model, see exactly what changes.*
 
 For a self-contained starting point, use the [documentation home](README.md),
 [About Quibble](about.md), and [installation guide](getting-started.md).
@@ -51,7 +51,7 @@ outside the browser's bounded controls.
 | Fix something that broke | [Troubleshooting](troubleshooting.md) |
 | Contribute a backend or run the tests | [Development](development.md) |
 | Review validation boundaries and planned work | [Limitations](limitations.md), [Project plan](project-plan.md) |
-| Understand the project scope and motivation | [Project rationale](<quibble why, what, and what it isn't.md>) |
+| Understand the project scope and motivation | [Project rationale](rationale.md) |
 
 ## Trust levels (what has actually been run)
 
@@ -62,14 +62,15 @@ outside the browser's bounded controls.
 | TabFM and KumoTabular on CPU | Small real classification/regression smoke checks plus mocked adapter contracts |
 | Analysis, swap, report, CLI, caches/history | Automated regression tests; run `python -m pytest` for current results |
 | Local CSV/Parquet | Automated input/provenance checks plus real CSV classification and Parquet regression CLI workflows |
-| TabPFN | Refusal logic tested; package/checkpoint source inspected, but end-to-end inference remains unverified |
+| TabPFN | Refusal logic tested; package/checkpoint source inspected, but end-to-end inference remains unverified (`quibble doctor` labels it experimental) |
+| Linear and dummy baselines, group/temporal splits, data flags, `quibble gate` | Automated tests, including planted-signal, noise, leakage and grouped-bootstrap cases |
 | OpenML downloads | IDs/downloads remain unverified; inspect `quibble datasets --verify --names ...` output before use |
 | CUDA detection | Confirmed locally with CUDA-enabled PyTorch on an RTX 5070 Ti |
 | TabFM and KumoTabular on CUDA | Successful local Wine classification records, including isolated smoke runs; not full GPU/task/dataset coverage |
 | CatBoost on CUDA | Successful local classification smoke run with exclusion/report checks; not full GPU/task/dataset coverage |
 | TabPFN and AutoGluon on CUDA | TabPFN real model execution remains unverified here; AutoGluon is excluded from new GPU-only runs |
 | Docker files | **Not tested** |
-| GitHub Actions workflow | Definition targets Python 3.10 to 3.12; remote execution remains unverified |
+| GitHub Actions workflow | Definition targets Python 3.10 to 3.13 (Linux) and 3.13 (Windows); remote execution remains unverified. The same steps pass locally on Linux, Python 3.12 |
 | Hosted-service backend | Not implemented |
 | Synthetic generator and localhost workbench | Automated deterministic/schema/provenance/HTTP checks, real generated classification smoke/regression full comparisons, and browser checks for data selection, variants, save/discard navigation |
 | Configurable planning providers and AAD/key/local auth | Mocked contracts including one validation-guided correction; a live HTTP response alone does not establish a valid generated specification |
@@ -82,5 +83,5 @@ not a completed full-data benchmark.
 
 ## Design proposals, not shipped features
 
-- [Recommend and abstain layer](<quibble recommend and abstain layer.md>): proposed baseline
-  gates, abstention, leakage caveats, and licensing checks.
+- [Recommend and abstain layer](recommend-abstain.md): baseline gates and data flags are
+  shipped (`quibble gate`); a Python `recommend()` API and licensing checks remain proposed.

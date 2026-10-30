@@ -39,6 +39,18 @@ def test_docs_exist():
         assert n in names, n
 
 
+def test_threshold_links_and_policy_workflow_match_the_packaged_resource():
+    assert (ROOT / "quibble" / "swap_thresholds.json").is_file()
+    assert not (ROOT / "swap_thresholds.example.json").exists()
+    assert '"swap_thresholds.json"' in (ROOT / "pyproject.toml").read_text()
+    for path, text in TEXT.items():
+        assert "swap_thresholds.example.json" not in text, path
+    guide = TEXT[ROOT / "docs" / "swap.md"]
+    for detail in ("--export-thresholds", "--require-thresholds", "Custom policy",
+                   "../quibble/swap_thresholds.json", "Download effective policy"):
+        assert detail in guide
+
+
 def test_release_metadata_is_consistent():
     from quibble import __version__
 

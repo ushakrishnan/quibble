@@ -21,6 +21,8 @@ excluded. CPU runs keep all selected methods. No algorithm is silently substitut
 | `tabfm` | Google Research TabFM (PyTorch) | both | yes | yes | CPU both tasks; local CUDA Wine classification fits |
 | `kumo_tabular` | NVIDIA structured-data-models | both | yes | yes | CPU both tasks; local CUDA Wine classification smoke fits |
 | `autogluon` | AutoGluon Tabular | both | excluded from GPU-only runs | own preprocessing | CPU, one dataset per task |
+| `dummy` | scikit-learn Dummy (class priors / training mean) | both | no | not used | yes (baseline) |
+| `linear` | scikit-learn logistic regression (classification) or ridge (regression), one-hot categoricals | both | no | one-hot | yes (baseline) |
 | `weak` | HistGB, handicapped | both | no | yes | yes (internal) |
 
 All backends use library defaults except where noted. quibble is not a tuner.
@@ -133,6 +135,18 @@ Notes:
   requirements together, then run `python -m pip check` and `python -m quibble doctor`.
 - GPU-only runs exclude AutoGluon because a GPU budget does not prevent CPU model families.
 - It is tested on CPU on one classification and one regression dataset.
+
+## `dummy` and `linear` (baselines)
+Reference models for `quibble gate` and for judging whether a complex model is worth using.
+`dummy` predicts class priors or the training mean. `linear` is logistic regression (classification,
+`max_iter=2000`) or ridge regression (regression, `alpha=1.0`) with median-imputed, scaled numeric
+columns and one-hot categoricals (unseen categories are ignored). Both are deterministic and run on
+CPU. They are included in `--backends all`.
+
+## Verification labels
+`quibble doctor` prints what has actually been run for each backend, and each run record stores the
+label as `backend_verification`. Treat `experimental` as "the adapter exists", not "it has produced a
+verified result".
 
 ## `weak` (internal)
 HistGB limited to `max_iter=2, learning_rate=0.05`. It exists so that a swap to a clearly worse model

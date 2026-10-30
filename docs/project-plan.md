@@ -7,7 +7,7 @@ description: Implemented evaluation capabilities, validation priorities, and rel
 
 Quibble develops a focused workflow for evaluating tabular model replacements:
 controlled execution, prediction-level evidence, and reviewable policy checks.
-See the [project rationale](<quibble why, what, and what it isn't.md>) for the scope.
+See the [project rationale](rationale.md) for the scope.
 
 ## Implemented foundations
 
@@ -34,9 +34,10 @@ model/platform paths have been exercised.
 4. Use `--jobs 1` for published resource measurements and document device differences.
 5. Separate smoke success, successful full-data fits, and evidence supporting a replacement.
 6. Publish configurations and failure coverage alongside findings, rather than only successful scores.
-7. Include credible simple baselines alongside complex methods. Logistic/ridge regression
-   and nearest-neighbor predictors are proposed additions; the internal `weak` backend is
-   a sanity check, not a substitute for them.
+7. Include credible simple baselines alongside complex methods. `dummy` and `linear` (logistic or
+   ridge regression) are implemented and `quibble gate` tests against them; nearest-neighbor
+   predictors remain a proposed addition. The internal `weak` backend is a sanity check, not
+   a substitute.
 8. Use controlled synthetic tasks to investigate sensitivity to training size, feature
    count, irrelevant inputs, missingness, and noise. Repeat across generated datasets,
    not only repeated splits of one table.
@@ -64,8 +65,9 @@ For example:
 > available when the decision is made.
 
 This particular request is illustrative; it is not a measured grocery application. The independent-row
-version deliberately excludes repeated store-item histories. Real panel data would need
-group/time-aware evaluation that is not implemented today.
+version deliberately excludes repeated store-item histories. Real panel data needs group or
+temporal evaluation; local datasets can declare `group_column` and `time_column` for that, but the
+synthetic generator still produces independent rows.
 
 Rows and fields alone are insufficient. The specification must make explicit:
 
@@ -99,7 +101,7 @@ Keep the generation recipe, latent variables, noiseless targets, and any oracle
 probabilities outside the predictor feature table and outside predictor prompts.
 The evaluation runner may access outcome labels for scoring, not expose them during
 prediction. The implemented generator excludes latent/oracle columns by construction.
-General semantic leakage detection remains unimplemented.
+Cheap heuristic data flags exist, but general semantic leakage detection remains unimplemented.
 
 Do not execute arbitrary code supplied by a user or returned by a language model.
 Start with bounded, reviewed generation templates. Natural-language assistance and any
@@ -146,17 +148,25 @@ findings on suitable real data before drawing application conclusions.
 
 ## Engineering priorities
 
-1. Extend local data/manifest fingerprints into complete evaluation-configuration identities.
-2. Add temporal/grouped evaluation support before extending claims to those workloads.
-3. Evaluate the proposed [baseline/abstention design](<quibble recommend and abstain layer.md>)
-   independently of existing swap policy checks.
-4. Expand calibration and slice diagnostics, including appropriate treatment of exploratory comparisons.
+Implemented since the last plan revision: configuration identity checks on result reuse (settings,
+model-specific settings and library versions), group and temporal splits and group-clustered
+intervals for local data, data flags, `dummy` and `linear` baselines, `quibble gate`, retraining-aware
+swap intervals, a family-wise worst-slice interval, seed-noise subtraction, and `--retry-failed`.
+
+1. Verify what is claimed: TabPFN end to end, the OpenML registry, remote CI, and Docker. Publish a
+   simulation study of the swap verdict's false-PASS and false-FAIL rates on data with known truth.
+2. Add backends that are usable commercially, with a license row in reports, and a tuned tier that
+   gives boosted trees an equal-budget search so defaults-only comparisons are not the only option.
+3. Add relational or multi-table benchmarking on top of temporal splits: point-in-time-correct
+   feature construction, entity-level disagreement, and feature-building cost reported separately.
+4. Expand calibration (per-class reliability) and slice diagnostics, including interaction slices
+   from a disagreement explainer.
 5. Explore a controlled LLM prediction comparison, distinguishing direct predictions
    from tool-assisted predictor building. Define held-out-label protection, prompts,
    output validation, tool/data access, retry budgets, provider/version records, and
    API cost/latency accounting before adding an adapter. Hosted execution also needs
    explicit data-handling permission. See the
-   [comparison rationale](<quibble why, what, and what it isn't.md#could-chatgpt-predict-from-the-same-csv>).
+   [comparison rationale](rationale.md#could-chatgpt-predict-from-the-same-csv).
 6. Extend the implemented bounded generator only with explicit specification,
    provenance, validation, and evaluation contracts. Consider additional distributions
    and controlled campaign tooling separately from the local generation engine.

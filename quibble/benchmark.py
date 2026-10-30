@@ -11,6 +11,7 @@ from .config import Config
 from .datasets import known
 from .history import new_run_id
 from .run import FLAGS, stem, sweep
+from .thresholds import load_thresholds, resolve_thresholds, validate_primary
 
 PRESETS = {
     "trees": ("histgb", "lightgbm", "catboost"),
@@ -30,7 +31,12 @@ def main() -> int:
     ap.add_argument("--jobs", type=int)
     ap.add_argument("--threads", type=int)
     ap.add_argument("--out")
+    ap.add_argument("--thresholds", type=Path, help="JSON overrides for swap limits")
+    ap.add_argument("--require-thresholds", action="store_true",
+                    help="require an explicit non-empty swap policy")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--retry-failed", action="store_true",
+                    help="rerun only cells whose saved result is an error")
     ap.add_argument("--keep-models", action="store_const", const="1", default=None,
                     help="retain fitted tree/AutoGluon models; not foundation estimators")
     ap.add_argument("--smoke", action="store_true",
@@ -45,6 +51,17 @@ def main() -> int:
         ap.error("--datasets must contain registered or local dataset names; use datasets --list")
     if a.smoke and (a.cv not in (None, "holdout") or a.model_seeds not in (None, "0")):
         ap.error("--smoke requires holdout and model seed 0")
+    if a.smoke and (a.thresholds or a.require_thresholds):
+        ap.error("--smoke does not run swap checks; threshold options require a full benchmark")
+    try:
+        thresholds = load_thresholds(a.thresholds) if a.thresholds else None
+        effective = resolve_thresholds(thresholds, a.require_thresholds)
+        if effective["primary"] is not None:
+            from .datasets import load
+            for name in datasets:
+                validate_primary(effective, load(name)[2])
+    except ValueError as exc:
+        ap.error(str(exc))
     a.cv = a.cv or ("holdout" if a.smoke else "3x2")
     a.model_seeds = a.model_seeds or "0"
     for dest, key in FLAGS.items():
@@ -65,7 +82,7 @@ def main() -> int:
         print("SMOKE TEST ONLY: bounded setup check, not benchmark or deployment evidence.")
     print(f"Benchmark preset: {a.preset}; backends: {', '.join(backends)}; device={cfg.device}")
     try:
-        invocation = sweep(backends, datasets, cfg, a.force)
+        invocation = sweep(backends, datasets, cfg, a.force, retry_failed=a.retry_failed)
     except ValueError as e:
         print(f"selection error: {e}", file=sys.stderr)
         return 2
@@ -74,7 +91,8 @@ def main() -> int:
     from .report import build
     incumbent = "histgb" if "histgb" in backends else backends[0]
     swaps = [] if a.smoke else [(incumbent, b) for b in backends if b != incumbent]
-    path = build(cfg.out_dir, datasets, model_seed=cfg.model_seeds[0], swaps=swaps)
+    path = build(cfg.out_dir, datasets, model_seed=cfg.model_seeds[0], swaps=swaps,
+                 thresholds=thresholds, require_thresholds=a.require_thresholds)
     print(f"\n{'Smoke' if a.smoke else 'Benchmark'} report: {path}")
     failed = False
     for cell in invocation["cells"]:

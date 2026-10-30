@@ -49,7 +49,7 @@ def build_site(output, base_path="/quibble"):
     sources = [*source_root.glob("quibble/*.py"), *source_root.glob("tests/*.py")]
     sources.extend(source_root / name for name in (
         "README.md", "LICENSE", ".env.example", "pyproject.toml", "requirements.txt",
-        "swap_thresholds.example.json", "Dockerfile", "docker-compose.yml"))
+        "quibble/swap_thresholds.json", "Dockerfile", "docker-compose.yml"))
     source_links = {
         "/" + path.relative_to(source_root).as_posix():
         REPOSITORY + "/blob/main/" + quote(path.relative_to(source_root).as_posix(), safe="/")

@@ -56,7 +56,12 @@ ranking of model families.
 - Quality metrics, row-cluster bootstrap intervals, disagreement exports, calibration, and diagnostic slices.
 - Measured fit time, prediction latency, process memory, and PyTorch allocation peaks where applicable.
 - Recorded refusals, execution/resource failures, model participation, and mixed-device labels.
-- PASS / FAIL / INCONCLUSIVE swap checks under configurable limits.
+- PASS / FAIL / INCONCLUSIVE swap checks under configurable limits, with intervals that also count
+  retraining variability (5+ splits), a family-wise worst-slice interval, and a seed-noise floor for
+  disagreement.
+- Simple baselines (`dummy`, `linear`) and `quibble gate`, which asks whether a model beats a baseline.
+- Group and temporal splits for local data, group-clustered intervals, and cheap data flags for
+  suspicious columns.
 - Interpreted reports, bounded smoke checks, dated result history, and optional supported-model retention.
 
 See [reports](reports.md), [testing your own data](testing-your-data.md), and
@@ -90,8 +95,8 @@ The [experiment workbench](experiment-workbench.md) lets users describe a predic
 task, review the assumptions, generate a repeatable labeled table, and compare methods.
 A user-configured language-model service can assist specification drafting; reviewed local code creates the data.
 Its purpose is experimental control, not manufacturing proof of real-world accuracy.
-Generation is limited to explicit independent-row processes. Additional simple
-baselines and automated controlled campaigns remain future work.
+Generation is limited to explicit independent-row processes. Automated controlled
+campaigns remain future work.
 
 ## Could ChatGPT predict from the same CSV?
 
@@ -136,12 +141,12 @@ that any approach wins. See the [project plan](project-plan.md).
 ## Scope boundaries
 
 Quibble is not a prediction service, a general data platform, or a production-safety
-certification system. It does not currently implement time/group splits, automated leakage
-detection, or license-aware model selection.
+certification system. Its leakage checks are cheap heuristics, not detection, and it does not
+implement license-aware model selection, relational or multi-table evaluation, or hyperparameter tuning.
 
-The [recommend and abstain proposal](<quibble recommend and abstain layer.md>) describes
-possible future baseline gates and explicit abstention. Those are distinct from the existing
-swap command's INCONCLUSIVE verdict and are not shipped APIs.
+The [recommend and abstain proposal](recommend-abstain.md) records what is shipped (`quibble gate`,
+data flags) and what is still proposed (a Python `recommend()` API across many candidates and
+license-aware selection).
 
 Statistical, measurement, and platform boundaries remain explicit in
 [limitations](limitations.md). Further work is tracked in the [project plan](project-plan.md).

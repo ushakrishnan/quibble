@@ -289,7 +289,7 @@ The full report is `results_payments/report/report.md`; smoke outputs stay under
 own `smoke/<id>` roots.
 
 For replacement limits, start from the
-[threshold example](../../swap_thresholds.example.json), review every applicable default,
+[packaged defaults](../../quibble/swap_thresholds.json), review every applicable default,
 and set values justified by the application. Writing the following illustration to
 `limits.json` would override only the listed keys:
 

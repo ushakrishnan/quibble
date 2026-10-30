@@ -17,6 +17,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 from . import __version__, datasets, planner, generate
 from .cache import project_path
 from .history import new_run_id
+from .thresholds import DEFAULTS, resolve_thresholds, validate_primary
 
 logger = logging.getLogger(__name__)
 ASSETS = Path(__file__).with_name("web_assets")
@@ -28,8 +29,7 @@ DOC_NAV = (
     ("Understand results", ("reports.md", "analysis.md", "swap.md", "results-format.md")),
     ("Reference & support", ("cli-reference.md", "troubleshooting.md", "limitations.md",
                              "index.md", "development.md", "project-plan.md")),
-    ("Ideas & rationale", ("quibble why, what, and what it isn't.md",
-                           "quibble recommend and abstain layer.md")),
+    ("Ideas & rationale", ("rationale.md", "recommend-abstain.md")),
     ("Blog", ("blog/README.md", "blog/01-same-accuracy-different-mistakes.md",
               "blog/02-making-prediction-comparisons-worth-trusting.md")),
 )
@@ -256,6 +256,7 @@ class Workbench:
                 "cuda_available": cuda_available(),
                 "cuda_exclusions": select_backends(list(BACKENDS), "cuda")[1],
                 "provider": provider, "limits": generate.LIMITS,
+                "threshold_defaults": dict(DEFAULTS),
                 "jobs": [json.loads(p.read_text(encoding="utf-8"))
                          for p in sorted(self.root.glob("*/job.json"), reverse=True)][:30]}
 
@@ -354,6 +355,10 @@ class Workbench:
             raise ValueError("Invalid device, mode, or split scheme.")
         if body.get("mode") == "full" and body.get("full_confirmed") is not True:
             raise ValueError("Confirm the full comparison; selected methods may download weights or take substantial time.")
+        overrides = body.get("thresholds")
+        if body["mode"] == "smoke" and overrides is not None:
+            raise ValueError("Smoke runs do not use swap thresholds.")
+        effective = resolve_thresholds(overrides, require=overrides is not None)
         if self.thread is not None and self.thread.is_alive():
             raise ValueError("An experiment is already running. Wait for its completion.")
         try:
@@ -366,6 +371,7 @@ class Workbench:
                              "Select CatBoost, TabPFN, TabFM or KumoTabular, or choose CPU.")
         # Validate source and split feasibility before starting expensive subprocess work.
         X, y, task = datasets.load(name)
+        validate_primary(effective, task)
         from .config import parse_cv
         cv = "holdout" if body["mode"] == "smoke" else body["cv"]
         if cv == "holdout":
@@ -385,9 +391,14 @@ class Workbench:
             command.append("--smoke")
         else:
             command += ["--cv", body["cv"]]
+            self._write(directory / "thresholds.json", effective)
+            if overrides is not None:
+                command += ["--thresholds", str(directory / "thresholds.json"), "--require-thresholds"]
         record = {"id": identifier, "dataset": name, "backends": methods, "device": body["device"],
                   "device_resolved": resolved, "included_backends": included, "excluded_backends": excluded,
                   "mode": body["mode"], "status": "queued", "exit_code": None,
+                  "thresholds": effective if body["mode"] == "full" else None,
+                  "thresholds_default": not overrides if body["mode"] == "full" else None,
                   "report_available": False, "error": None}
         self._write(directory / "job.json", record)
         self.active = identifier

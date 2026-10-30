@@ -93,9 +93,11 @@ Add tests with new behavior and regression tests with fixes. For example, metric
 tests verify that quality degradation is positive when a candidate is worse.
 
 ## Continuous integration
-`.github/workflows/ci.yml` defines `pytest` and `quibble demo --cv 3x1` runs on Python
-3.10, 3.11, and 3.12. Remote execution has not been verified. CI installs `.[dev]`, not the complete local
-requirements; full model-library and Windows/CUDA setup validation are separate.
+`.github/workflows/ci.yml` defines `pytest`, `quibble demo --cv 3x1` and two swap exit-code checks
+on Python 3.10 to 3.13 (Linux) and Python 3.13 (Windows). Remote execution has not been verified; the
+same steps passed locally on Linux with Python 3.12. CI installs `.[dev]`, which contains everything the
+tests import (pyarrow, openai, azure-identity, matplotlib, markdown-it-py, bleach), but not the heavy
+model libraries; full model-library and Windows/CUDA setup validation are separate.
 
 ## Extending
 **New backend:** see [Backends](backends.md#adding-a-backend).

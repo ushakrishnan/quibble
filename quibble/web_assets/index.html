@@ -122,6 +122,24 @@ __PRODUCT_HEADER__
     <p id="device-status" class="hint" role="status" aria-live="polite"></p>
     <p class="hint">Runs use one worker and model seed 0. Smoke uses at most 128 training and 32 test rows, with no swap approval. CUDA runs exclude incompatible methods rather than running them on CPU.</p>
     <details>
+      <summary>Swap acceptance policy (full runs)</summary>
+      <p>These are the default limits Quibble uses, not universally safe acceptance criteria. Review them for your application. Custom JSON overrides only the keys you supply. Smoke runs do not evaluate a swap policy.</p>
+      <fieldset id="threshold-controls" disabled>
+        <legend>Configure swap thresholds</legend>
+        <label>Policy <select id="threshold-mode"><option value="defaults">Packaged defaults</option><option value="custom">Custom policy</option></select></label>
+        <label for="thresholds">Threshold JSON</label>
+        <textarea id="thresholds" rows="15" spellcheck="false" readonly></textarea>
+        <label>Import custom JSON <input id="threshold-file" type="file" accept=".json,application/json" disabled></label>
+        <div class="actions">
+          <button id="reset-thresholds" class="secondary">Reset to defaults</button>
+          <button id="download-thresholds" class="secondary">Download effective policy</button>
+        </div>
+      </fieldset>
+      <p id="threshold-status" class="hint" role="status" aria-live="polite"></p>
+      <details><summary>Effective limits (defaults plus overrides)</summary><pre id="effective-thresholds"></pre></details>
+      <p class="hint">The effective policy is saved with each full experiment and shown in its report. Download a copy to reuse with the CLI or import for a later run. <a href="/docs/swap.md" target="_blank" rel="noopener noreferrer">Threshold meanings and units</a>.</p>
+    </details>
+    <details>
       <summary>What Full does, and what the results establish</summary>
       <p>Each selected method fits on training rows and predicts separate held-out test rows. Holdout uses 70% for training and 30% for testing. Three-fold evaluation uses two thirds to train and one third to test, with three fresh fits; two repeats uses six fits per method. Classification preserves class proportions when feasible. Methods share the same splits for paired comparisons.</p>
       <p>Preprocessing is learned on training rows. Tree methods train on that split; pretrained methods prepare or condition on those examples rather than retraining their foundation weights from scratch. Full removes smoke row caps, but method-specific limits still apply and refusals are reported.</p>
@@ -141,6 +159,7 @@ __PRODUCT_HEADER__
     </div>
     <label>Current and previous experiments <select id="jobs"><option value="">Select an experiment to view its report</option></select></label>
     <p id="job-status"></p>
+    <details id="job-policy" hidden><summary>Saved swap acceptance policy</summary><p id="job-policy-source"></p><pre id="job-thresholds"></pre><button id="download-job-thresholds" class="secondary">Download saved policy</button></details>
     <p id="job-return"></p>
     <details><summary>Execution log</summary><pre id="log">Choose an experiment.</pre></details>
     <div class="actions"><button id="refresh" class="secondary">Refresh</button><button id="download-report" class="secondary" disabled>Download Markdown report</button></div>

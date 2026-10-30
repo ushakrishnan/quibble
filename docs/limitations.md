@@ -12,8 +12,10 @@ The following boundaries determine which conclusions the current evaluation supp
   series, or survival problems.
 - Datasets come from OpenML (by id), the three built-in scikit-learn sets, or named local
   CSV/Parquet folders. Local inputs need explicit target/task metadata; see
-  [Testing your own data](testing-your-data.md). No Excel, unlabeled-prediction, streaming,
-  group/time split, or separate train/test-file interface is implemented.
+  [Testing your own data](testing-your-data.md). Local data can declare a group or time column for
+  group and temporal splits; OpenML and built-in sets use random splits. No Excel,
+  unlabeled-prediction, streaming, relational or multi-table, or separate train/test-file interface
+  is implemented.
 - Whole datasets are held in memory.
 - The [synthetic workbench](experiment-workbench.md) implements bounded independent-row
   generation and optional provider-configured specification drafting. It does not simulate arbitrary
@@ -29,15 +31,28 @@ The following boundaries determine which conclusions the current evaluation supp
   requirements; local CUDA validation is limited to selected classification fits.
 
 ## Statistics
-- Intervals reflect test-set noise only, not retraining variability. `split_std` is a rough guide.
-- Repeated CV splits overlap in their training sets, so split-to-split variation understates true
-  variance.
-- The worst-slice check is a maximum over several slices, without multiple-comparison correction.
+- Bootstrap intervals reflect test-set noise only. The corrected split interval that also counts
+  retraining variability needs 5 or more splits; with fewer, swap says so and counts test-set noise only.
+- The corrected interval is a heuristic (Nadeau-Bengio). It is conservative with few splits and
+  assumes the splits are exchangeable, which temporal forward-chaining folds are not.
 - Slices cover only missingness, rare categories and three numeric features; no interaction slices.
-- Multiclass calibration is top-label only; there is no per-class reliability analysis.
-- The disagreement thresholds (0.25 target standard deviations, 90% confidence, 1% rare category,
-  0.2 margin) are fixed defaults, not tuned.
-- The swap limits are placeholders and need tuning to what a swap really costs you.
+  They are chosen using the target and ranked by spread, so they are exploratory. `slices.csv` has no
+  intervals. The swap worst-slice interval covers the maximum over slices but counts test-set noise only.
+- Multiclass calibration is top-label only; there is no per-class reliability analysis. The swap ECE
+  check has an interval, but ECE depends on its 10 equal-width bins.
+- Disagreement thresholds (regression gap, confidence, rare category, margin) are configurable
+  defaults, not tuned. The reseed noise floor needs 2 or more model seeds; deterministic backends
+  show zero seed noise even though retraining on different data would change their predictions.
+- The [packaged swap defaults](../quibble/swap_thresholds.json) need review against what a swap
+  really costs you; they are not universally safe acceptance criteria. Verdicts
+  use default model settings; quibble does not tune hyperparameters, so a swap verdict says nothing
+  about a tuned candidate.
+- Data flags are heuristics: a single-feature check, ID-like columns, duplicate rows and column
+  names that look like dates. They do not detect leakage through combinations of features or
+  through the way the data was collected.
+- Group and temporal splits exist for local datasets only, and only one time or group column.
+  Nested hierarchies, gaps between train and test periods, and expanding versus sliding windows are
+  not configurable.
 - Prediction agreement does not identify a predictor's internal algorithm, and a report's
   interpretation is not an explanation of its internal computation.
 - Familiar public datasets may have been encountered during pretraining. Quibble does
@@ -50,14 +65,26 @@ The following boundaries determine which conclusions the current evaluation supp
   do not measure variation across independently generated datasets.
 
 ## Measurement
-- Latency and memory are single-machine, and meaningful only for `--jobs 1`.
-- `peak_rss_mb` is a per-process high-water mark; `peak_torch_vram_mb` counts PyTorch allocations
-  only (including PyTorch components used by AutoGluon, but not CatBoost or other non-Torch allocations).
-- AutoGluon's seed is not controlled and its time budget dominates `fit_s`.
+- Latency and memory are single-machine, and meaningful only for `--jobs 1`. Latency uses 3 warm-up
+  calls and a median; it includes a small pandas copy per call that applies to every backend.
+- `peak_rss_mb` is a per-process high-water mark that includes the interpreter and imports.
+  `peak_rss_increase_mb` subtracts the process size just before fitting, and is what swap compares.
+  It needs `psutil` or Linux `/proc`; on other systems only the peak is recorded.
+  `peak_torch_vram_mb` counts PyTorch allocations only (including PyTorch components used by
+  AutoGluon, but not CatBoost or other non-Torch allocations).
+- `fit_s` excludes pretrained-weight loading, which is `load_s`; `fit_total_s` is both. Weight loading
+  time is measured where the adapter builds the model, so lazily loaded weights can still land in `fit_s`.
+- AutoGluon's seed is not controlled (`seed_controlled: false`) and its time budget dominates `fit_s`.
 - HistGB uses random validation splits above about 10,000 training rows, so its seed matters there
   even though it does not on small data.
-- Finished runs are identified by file name; changing settings without changing `--out` reuses old
-  results (a warning is printed, but they are still skipped).
+- Finished runs are identified by file name. Changing settings without changing `--out` reuses old
+  results with a warning (they are skipped), and `quibble benchmark` then exits non-zero. The check
+  compares device, preprocessing, CV scheme, run type, model-specific settings (TabFM, Kumo,
+  AutoGluon preset and time limit, TabPFN row limit), latency sample size, the dataset fingerprint
+  and the installed versions of numpy, pandas and the backend's library. Settings it does not
+  compare, such as thread count, can still differ.
+- Error results count as finished. Rerun only the failed cells with `--retry-failed`; refusals are
+  deterministic and are kept.
 - Local data/manifest fingerprints prevent changed inputs from being analyzed against old
   predictions. Use a new output root for changed tables or column rules.
 - Mixed CPU/GPU reports are explicitly labeled. AutoGluon's recorded device denotes its
@@ -71,7 +98,7 @@ The following boundaries determine which conclusions the current evaluation supp
 
 ## Not yet verified on real hardware or services
 - TabPFN end to end. Its row/feature/class refusal limits are harness policy, not validated
-  maximum capabilities of the installed library.
+  maximum capabilities of the installed library. `quibble doctor` labels it experimental.
 - Comprehensive validation of the OpenML registry and its download paths.
 - TabPFN on CUDA, CatBoost GPU regression/large-data coverage, and historical AutoGluon
   GPU-budget behavior. CatBoost has passed a small local CUDA classification smoke;
@@ -79,7 +106,8 @@ The following boundaries determine which conclusions the current evaluation supp
 - TabFM and KumoTabular have passed small CPU classification and regression smoke tests with
   cached pretrained weights. Local CUDA Wine classification fits have also succeeded;
   GPU regression and large-dataset behavior remain unverified.
-- The Docker files and the GitHub Actions workflow.
+- The Docker files and the GitHub Actions workflow have not run remotely. The test suite and the
+  demo have passed locally on Linux with Python 3.12 with the `dev` extra installed.
 
 ## Known rough edges
 - The OpenML registry is hand-written.

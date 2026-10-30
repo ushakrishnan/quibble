@@ -15,18 +15,21 @@ import pandas as pd
 
 from .config import analysis_settings
 from .datasets import load, validate_sources
-from .metrics import Boot, ece, norm, score
-from .pool import align, load_pool
-from .slices import row_traits, slice_masks
+from . import leakage
+from .metrics import Boot, corrected_interval, ece, norm, score
+from .pool import align, load_pool, seeds_available
+from .slices import row_traits, slice_masks, unique_rows
+from .thresholds import DEFAULTS
 
-HI, BIG, NEAR = 0.9, 0.25, 0.2  # confident-both prob; regression gap in target std; margin cutoff
+HI, BIG, NEAR = (DEFAULTS[key] for key in ("confident_prob", "regression_gap_std", "near_margin"))
+MIN_SLICE_ROWS = DEFAULTS["min_slice_n"]
 
 
 def primary_of(task):
     return "accuracy" if task == "classification" else "rmse"
 
 
-def pair_frame(pool, ia, ib, traits, task):
+def pair_frame(pool, ia, ib, traits, task, hi=HI, big=BIG, near=NEAR):
     """One row per pooled prediction pair, with disputed flag and row traits."""
     A, B, y, idx = pool["Ps"][ia], pool["Ps"][ib], pool["y"], pool["idx"]
     if task == "classification":
@@ -37,13 +40,13 @@ def pair_frame(pool, ia, ib, traits, task):
         f = pd.DataFrame({"split": pool["split"], "row": idx, "y": yi, "pred_a": pa, "pred_b": pb,
                           "conf_a": A.max(1), "conf_b": B.max(1), "a_correct": pa == yi,
                           "b_correct": pb == yi, "disputed": disp,
-                          "confident_both": disp & (A.max(1) >= HI) & (B.max(1) >= HI)})
-        f["near_boundary"] = 0.5 * (mg(A) + mg(B)) < NEAR
+                          "confident_both": disp & (A.max(1) >= hi) & (B.max(1) >= hi)})
+        f["near_boundary"] = 0.5 * (mg(A) + mg(B)) < near
     else:
         sd = np.std(y) or 1.0
         gap = np.abs(A - B) / sd
         f = pd.DataFrame({"split": pool["split"], "row": idx, "y": y, "pred_a": A, "pred_b": B,
-                          "gap_std": gap, "disputed": gap > BIG,
+                          "gap_std": gap, "disputed": gap > big,
                           "a_closer": np.abs(A - y) < np.abs(B - y)})
         f["extreme_target"] = (y < np.percentile(y, 10)) | (y > np.percentile(y, 90))
     f["has_missing"] = traits["has_missing"].to_numpy()[idx]
@@ -96,7 +99,31 @@ class AnalysisError(Exception):
     pass
 
 
-def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, backends=None,
+def make_boot(pool, X, n_boot):
+    """Bootstrap whose resampling unit is a group (customer, account, ...) when the dataset
+    declares one, otherwise a row. Correlated rows must not be treated as independent."""
+    groups = X.attrs.get("quibble_groups")
+    cluster = None if groups is None else np.asarray(groups)[np.unique(pool["idx"])]
+    return Boot(pool["row_pos"], n_boot, cluster=cluster)
+
+
+def split_info(X):
+    return X.attrs.get("quibble_split") or {"kind": "random"}
+
+
+def reseed_rate(out, dataset, backend, task, traits, **kw):
+    """Disagreement between two training seeds of the same backend: the noise floor that any
+    candidate-vs-incumbent disagreement should be read against. None with fewer than two seeds."""
+    pools = [p for p in (load_pool(out, dataset, backend, s)[0] for s in seeds_available(out, dataset, backend)) if p]
+    rates = []
+    for a, b in itertools.combinations(range(len(pools)), 2):
+        pool = align([pools[a], pools[b]])
+        if pool:
+            rates.append(float(pair_frame(pool, 0, 1, traits, task, **kw)["disputed"].mean()))
+    return float(np.mean(rates)) if rates else None
+
+
+def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=MIN_SLICE_ROWS, backends=None,
             quiet=False):
     """Full Build 2 analysis for one dataset. Returns a dict of results (DataFrames etc.)."""
     say = (lambda *a, **k: None) if quiet else print
@@ -116,7 +143,8 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
         raise AnalysisError(f"Dataset {dataset}: {e}") from e
     names = backends or sorted({p.name.split("_ss")[0] for p in files})
     ms = model_seed if model_seed is not None else min(int(p.stem.split("_ms")[1]) for p in files)
-    pools = {n: load_pool(out, dataset, n, ms)[0] for n in names}
+    loaded = {n: load_pool(out, dataset, n, ms) for n in names}
+    pools = {n: v[0] for n, v in loaded.items()}
     for n in names:
         if not pools[n]:
             say(f"(skipping {n}: no usable runs)")
@@ -133,14 +161,36 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
             if set(pools[n]) - set(pool["splits"])}
     if lost:
         say(f"note: splits dropped because another backend failed on them: {lost}")
-    boot = Boot(pool["row_pos"], S["n_boot"])
+    boot = make_boot(pool, X, S["n_boot"])
     clf = task == "classification"
+    flags = leakage.check(X, yall, task, split_info(X).get("kind", "random"))
+    for line in leakage.format_flags(flags):
+        say(f"DATA FLAG {line}")
+    traits_all = row_traits(X)
 
     rows, cal = [], []
     for n, P in zip(keep, pool["Ps"]):
         pt, lo, hi = boot.ci(lambda w: score(metric, y, P, w))
         per = [score(metric, y[pool["split"] == s], P[pool["split"] == s]) for s in pool["splits"]]
-        r = {"backend": n, metric: pt, "ci_lo": lo, "ci_hi": hi, "split_std": float(np.std(per))}
+        runs = [q for q in loaded[n][1] if q.get("split_seed") in pool["splits"] and "error" not in q
+                and "refused" not in q]
+        n_tr = float(np.mean([q["n_train"] for q in runs])) if runs else 0
+        n_te = float(np.mean([q["n_test"] for q in runs])) if runs else 0
+        _, cv_lo, cv_hi = corrected_interval(per, n_tr, n_te)
+        r = {"backend": n, metric: pt, "ci_lo": lo, "ci_hi": hi, "split_std": float(np.std(per)),
+             "cv_lo": cv_lo, "cv_hi": cv_hi}
+        seeds = seeds_available(out, dataset, n)
+        by_seed = []
+        for sd in seeds:
+            sp_ = load_pool(out, dataset, n, sd)[0]
+            al = align([sp_]) if sp_ else None
+            if al and set(al["splits"]) >= set(pool["splits"]):
+                keep_ = np.isin(al["split"], pool["splits"])
+                by_seed.append(score(metric, al["y"][keep_], al["Ps"][0][keep_]))
+        r["n_seeds"] = len(seeds)
+        r["seed_std"] = float(np.std(by_seed, ddof=1)) if len(by_seed) >= 2 else np.nan
+        rr = reseed_rate(out, dataset, n, task, traits_all) if len(seeds) >= 2 else None
+        r["reseed_disagreement"] = np.nan if rr is None else rr
         if clf:
             r["auc"], r["brier"] = score("auc", y, P), score("brier", y, P)
             e, tab = ece(y.astype(int), P)
@@ -152,7 +202,9 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
         rows.append(r)
     summ = pd.DataFrame(rows)
     summ.to_csv(adir / "summary.csv", index=False)
-    say("\n== quality (95% bootstrap CI over data rows; split_std = spread across splits) ==")
+    say("\n== quality (ci = 95% bootstrap CI over data rows or groups, test-set noise only; "
+        "cv = wider interval that also counts retraining variability, needs 5+ splits; "
+        "split_std = spread across splits) ==")
     say(summ.round(4).to_string(index=False))
     if clf:
         pd.DataFrame(cal).to_csv(adir / "calibration.csv", index=False)
@@ -161,9 +213,10 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
     srows = []
     for name, mk in masks.items():
         sel = mk[pool["idx"]]
-        if sel.sum() < min_slice_n:
+        rows_in = unique_rows(sel, pool["idx"])
+        if rows_in < min_slice_n:
             continue
-        r = {"slice": name, "n": int(sel.sum())}
+        r = {"slice": name, "n": rows_in}
         for n, P in zip(keep, pool["Ps"]):
             r[n] = score(metric, y[sel], P[sel])
         r["spread"] = max(r[n] for n in keep) - min(r[n] for n in keep)
@@ -171,7 +224,8 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
     sl = pd.DataFrame(srows).sort_values("spread", ascending=False) if srows else pd.DataFrame()
     if len(sl):
         sl.to_csv(adir / "slices.csv", index=False)
-        say(f"\n== slices ({metric}; top 8 by spread between backends; n counts pooled predictions) ==")
+        say(f"\n== slices ({metric}; top 8 by spread between backends; n = distinct rows; exploratory: "
+            "chosen using the target, no intervals) ==")
         say(sl.head(8).round(4).to_string(index=False))
 
     pairs, pair_list = {}, []
@@ -188,14 +242,16 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=30, bac
         s["csv"] = csv
     (adir / "analysis.json").write_text(json.dumps(
         {"dataset": dataset, "task": task, "metric": metric, "model_seed": ms,
-         "splits": pool["splits"], "summary": rows, "pairs": pairs,
-         "dataset_source": X.attrs.get("quibble_source")}, indent=2, default=float))
+         "splits": pool["splits"], "summary": rows, "pairs": pairs, "data_flags": flags,
+         "split": split_info(X), "dataset_source": X.attrs.get("quibble_source")},
+        indent=2, default=float))
     say(f"\nwritten to {adir}/")
     from .datasets import meta
     return {"dataset": dataset, "task": task, "metric": metric, "model_seed": ms, "backends": keep,
             "splits": pool["splits"], "n_rows": int(len(np.unique(pool["idx"]))), "summary": summ,
             "slices": sl, "calibration": cal, "pairs": pair_list, "dropped": lost, "adir": adir,
-            "meta": meta(X, yall, task), "dataset_source": X.attrs.get("quibble_source")}
+            "meta": meta(X, yall, task), "dataset_source": X.attrs.get("quibble_source"),
+            "flags": flags, "split": split_info(X)}
 
 
 def main():
@@ -205,7 +261,8 @@ def main():
     ap.add_argument("--model-seed", type=int)
     ap.add_argument("--metric")
     ap.add_argument("--out")
-    ap.add_argument("--min-slice-n", type=int, default=30)
+    ap.add_argument("--min-slice-n", type=int, default=MIN_SLICE_ROWS,
+                    help="smallest slice, in distinct rows")
     a = ap.parse_args()
     try:
         analyse(a.dataset, a.out, a.model_seed, a.metric, a.min_slice_n,

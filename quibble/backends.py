@@ -1,6 +1,7 @@
 """A backend = a class with fit(...) and predict(...). See README: adding one takes ~20 lines."""
 import shutil
 import tempfile
+import time
 
 import numpy as np
 import pandas as pd
@@ -10,8 +11,15 @@ class Refused(Exception):
     """Backend cannot handle this task/size. Recorded as a result, not a crash."""
 
 
+def is_categorical(col):
+    """object, string and category columns; written without select_dtypes so it behaves the same
+    on pandas 2 and on pandas 3, where string columns get their own dtype."""
+    return (pd.api.types.is_object_dtype(col) or pd.api.types.is_string_dtype(col)
+            or isinstance(col.dtype, pd.CategoricalDtype))
+
+
 def cat_cols(X):
-    return list(X.select_dtypes(include=["object", "category"]).columns)
+    return [c for c in X.columns if is_categorical(X[c])]
 
 
 class Prep:
@@ -27,7 +35,10 @@ class Prep:
     def transform(self, X):
         X = X.copy()
         for c, cats in self.cats.items():
-            s = pd.Categorical(X[c], categories=cats)
+            # unseen values become missing before the categorical is built, which keeps the
+            # behaviour pandas is deprecating (constructing with values outside the categories)
+            col = X[c]
+            s = pd.Categorical(col.where(col.isin(cats)), categories=cats)
             if self.mode == "native":
                 X[c] = s
             else:
@@ -44,6 +55,10 @@ class Backend:
     native_ok = False  # supports native categoricals (QUIBBLE_PREPROCESS=native)?
     info = {}
     can_save = False
+    baseline = False  # a deliberately simple reference model
+    load_s = 0.0  # seconds spent building the model (pretrained weights); fit_s excludes it
+    seed_controlled = True  # does the model seed make training reproducible?
+    verification = "tested"  # what has actually been run: shown by `quibble doctor`
 
     def fit(self, Xtr, ytr, task, seed, cfg, device):
         raise NotImplementedError
@@ -84,8 +99,11 @@ class _SK(Backend):
         self.prep = Prep(mode).fit(Xtr)
         Xa = self.transform(Xtr)
         cat_idx = [Xa.columns.get_loc(c) for c in self.prep.cats] if mode == "native" else []
-        self.model = self.make(task, seed, cfg, device, cat_idx)
+        t = time.perf_counter()
+        self.model = self.make(task, seed, cfg, device, cat_idx)  # pretrained weights load here
+        load_s = time.perf_counter() - t
         self.model.fit(Xa, ytr)
+        self.load_s = load_s
         self.info = {"preprocess_effective": mode,
                      "device_effective": device if self.gpu else "cpu"}
 
@@ -153,6 +171,7 @@ class CatBoost(_SK):
 
 class TabPFN(_SK):
     name, gpu = "tabpfn", True
+    verification = "experimental: adapter and refusal logic tested; no end-to-end fit recorded"
 
     def make(self, task, seed, cfg, device, cat_idx):
         from tabpfn import TabPFNClassifier as Cl, TabPFNRegressor as Rg
@@ -171,6 +190,7 @@ class TabPFN(_SK):
 
 class TabFM(_SK):
     name, native_ok, gpu = "tabfm", True, True
+    verification = "smoke-tested on CPU; limited full-data evidence"
 
     def make(self, task, seed, cfg, device, cat_idx):
         from tabfm import TabFMClassifier, TabFMRegressor, tabfm_v1_0_0_pytorch
@@ -185,6 +205,7 @@ class TabFM(_SK):
 
 class KumoTabular(Backend):
     name, native_ok, gpu = "kumo_tabular", True, True
+    verification = "smoke-tested on CPU; limited full-data evidence"
 
     def fit(self, Xtr, ytr, task, seed, cfg, device):
         import sdm
@@ -200,10 +221,13 @@ class KumoTabular(Backend):
             "__y__": "categorical" if task == "classification" else "numerical"})
         y = sdm.TableTensor.from_pandas(df=target, stypes=y_stypes, device=device)
         self.classes = [str(c) for c in np.unique(ytr)] if task == "classification" else None
+        t = time.perf_counter()
         self.model = sdm.models.KumoTabular(
             task=task, size=cfg.kumo_size, pretrained=True, device=device)
+        load_s = time.perf_counter() - t
         generator = torch.Generator(device=device).manual_seed(seed)
         self.model.fit(x=x, y=y, num_estimators=cfg.kumo_n_estimators, generator=generator)
+        self.load_s = load_s
         self.info = {"preprocess_effective": cfg.preprocess, "device_effective": device,
                      "kumo_size": cfg.kumo_size, "kumo_n_estimators": cfg.kumo_n_estimators}
 
@@ -238,6 +262,8 @@ class KumoTabular(Backend):
 
 class AutoGluon(Backend):
     name, gpu = "autogluon", True
+    seed_controlled = False  # the model seed is accepted but AutoGluon runs are not seeded here
+    verification = "tested on small CPU datasets; GPU runs excluded"
     cuda_exclusion = ("AutoGluon's GPU budget does not guarantee GPU-only model execution; "
                       "its ensemble can include CPU components.")
     can_save = True
@@ -254,11 +280,14 @@ class AutoGluon(Backend):
                    num_gpus=1 if device == "cuda" else 0,
                    num_cpus=cfg.threads if cfg.threads else "auto")
         self.info = {"preprocess_effective": "native", "device_effective": device,
+                     "seed_controlled": False,
                      "ag_preset": cfg.ag_preset, "ag_time_limit": cfg.ag_time_limit}
 
     def predict(self, X):
-        return (self.p.predict_proba(X) if self.task == "classification"
-                else self.p.predict(X)).to_numpy()
+        if self.task != "classification":
+            return self.p.predict(X).to_numpy()
+        proba = self.p.predict_proba(X)
+        return proba[sorted(proba.columns)].to_numpy()  # columns in label order, as every adapter returns
 
     def close(self):
         shutil.rmtree(getattr(self, "path", ""), ignore_errors=True)
@@ -272,8 +301,63 @@ class AutoGluon(Backend):
         return True
 
 
+class Dummy(Backend):
+    """Reference: class priors (classification) or the training mean (regression)."""
+    name, baseline = "dummy", True
+
+    def fit(self, Xtr, ytr, task, seed, cfg, device):
+        from sklearn.dummy import DummyClassifier, DummyRegressor
+        self._check(task)
+        self.task = task
+        self.model = (DummyClassifier(strategy="prior") if task == "classification"
+                      else DummyRegressor(strategy="mean")).fit(Xtr, ytr)
+        self.info = {"preprocess_effective": "none", "device_effective": "cpu"}
+
+    def predict(self, X):
+        return self.model.predict_proba(X) if self.task == "classification" else self.model.predict(X)
+
+
+class _Linear(Backend):
+    """Reference linear model: median-imputed, scaled numerics plus one-hot categoricals."""
+    baseline = True
+
+    def make(self, task, seed):
+        raise NotImplementedError
+
+    def fit(self, Xtr, ytr, task, seed, cfg, device):
+        from sklearn.compose import ColumnTransformer
+        from sklearn.impute import SimpleImputer
+        from sklearn.pipeline import Pipeline, make_pipeline
+        from sklearn.preprocessing import OneHotEncoder, StandardScaler
+        self._check(task)
+        self.task = task
+        cats = cat_cols(Xtr)
+        nums = [c for c in Xtr.columns if c not in cats]
+        parts = []
+        if nums:
+            parts.append(("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), nums))
+        if cats:
+            parts.append(("cat", make_pipeline(SimpleImputer(strategy="most_frequent"),
+                                               OneHotEncoder(handle_unknown="ignore")), cats))
+        self.model = Pipeline([("prep", ColumnTransformer(parts)), ("model", self.make(task, seed))])
+        self.model.fit(Xtr, ytr)
+        self.info = {"preprocess_effective": "onehot", "device_effective": "cpu"}
+
+    def predict(self, X):
+        return self.model.predict_proba(X) if self.task == "classification" else self.model.predict(X)
+
+
+class Linear(_Linear):
+    """Logistic regression (classification) or ridge regression (regression)."""
+    name = "linear"
+
+    def make(self, task, seed):
+        from sklearn.linear_model import LogisticRegression, Ridge
+        return LogisticRegression(max_iter=2000) if task == "classification" else Ridge(alpha=1.0)
+
+
 BACKENDS = {b.name: b for b in
-            (HistGB, Weak, LightGBM, CatBoost, TabPFN, TabFM, KumoTabular, AutoGluon)}
+            (Dummy, Linear, HistGB, Weak, LightGBM, CatBoost, TabPFN, TabFM, KumoTabular, AutoGluon)}
 
 
 def device_exclusion(name, device):

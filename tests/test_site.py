@@ -54,6 +54,7 @@ def test_static_site_has_no_broken_internal_links(tmp_path, base_path):
     article = output / "docs" / "blog" / "02-making-prediction-comparisons-worth-trusting.html"
     text = article.read_text(encoding="utf-8")
     assert "https://github.com/ushakrishnan/quibble/blob/main/quibble/datasets.py" in text
+    assert "https://github.com/ushakrishnan/quibble/blob/main/quibble/swap_thresholds.json" in text
     assert 'aria-label="Blog series"' in text
     assert "GitHub Pages hosts these guides" in (output / "workbench" / "index.html").read_text()
     names = {path.name for path in output.rglob("*")}

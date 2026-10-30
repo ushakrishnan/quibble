@@ -55,6 +55,16 @@ def known(name):
     return name in BUILTIN or name in OPENML or name in local_names()
 
 
+SPLIT_KINDS = ("random", "group", "temporal")
+
+
+def split_kind(spec):
+    """Effective split scheme for a local manifest: time ordering wins, then groups, else random."""
+    if spec.get("split"):
+        return spec["split"]
+    return "temporal" if "time_column" in spec else "group" if "group_column" in spec else "random"
+
+
 def local_spec(name):
     if not valid_name(name):
         raise ValueError("Local dataset names must contain letters, digits, hyphens or underscores "
@@ -68,7 +78,8 @@ def local_spec(name):
     if not manifest.is_file():
         raise ValueError(f"Unknown dataset {name!r}; expected local manifest {manifest}")
     spec = json.loads(manifest.read_text(encoding="utf-8-sig"))
-    allowed = {"file", "target", "task", "drop_columns", "categorical_columns"}
+    allowed = {"file", "target", "task", "drop_columns", "categorical_columns",
+               "time_column", "group_column", "split"}
     if not isinstance(spec, dict) or set(spec) - allowed:
         raise ValueError(f"{manifest}: expected an object with only {sorted(allowed)}")
     for key in ("file", "target", "task"):
@@ -84,6 +95,22 @@ def local_spec(name):
     if spec["target"] in spec["drop_columns"] + spec["categorical_columns"] \
             or set(spec["drop_columns"]) & set(spec["categorical_columns"]):
         raise ValueError(f"{manifest}: target, dropped, and categorical columns must not overlap")
+    for key in ("time_column", "group_column"):
+        if key in spec and (not isinstance(spec[key], str) or not spec[key].strip()):
+            raise ValueError(f"{manifest}: {key} must be a nonempty column name")
+    if "split" in spec and spec["split"] not in SPLIT_KINDS:
+        raise ValueError(f"{manifest}: split must be one of {', '.join(SPLIT_KINDS)}")
+    if spec.get("split") == "temporal" and "time_column" not in spec:
+        raise ValueError(f"{manifest}: split 'temporal' needs time_column")
+    if spec.get("split") == "group" and "group_column" not in spec:
+        raise ValueError(f"{manifest}: split 'group' needs group_column")
+    structural = [spec[k] for k in ("time_column", "group_column") if k in spec]
+    if len(structural) != len(set(structural)) or {spec["target"], *spec["drop_columns"],
+                                                    *spec["categorical_columns"]} & set(structural):
+        raise ValueError(f"{manifest}: target, dropped, categorical, time and group columns must not overlap")
+    if "\\" in spec["file"]:
+        raise ValueError(f"{manifest}: file must be a relative path inside the dataset folder "
+                         "(use forward slashes)")
     relative = Path(spec["file"])
     path = (directory / relative).resolve()
     if relative.is_absolute() or not path.is_relative_to(directory.resolve()):
@@ -91,6 +118,11 @@ def local_spec(name):
     if path.suffix.lower() not in (".csv", ".parquet"):
         raise ValueError(f"{manifest}: file must end in .csv or .parquet")
     return spec, path
+
+
+def is_categorical(col):
+    return (pd.api.types.is_object_dtype(col) or pd.api.types.is_string_dtype(col)
+            or isinstance(col.dtype, pd.CategoricalDtype))
 
 
 def _source(spec, path, raw):
@@ -164,7 +196,8 @@ def _local_fetch(name):
     if not frame.columns.is_unique or any(not isinstance(c, str) or not c.strip()
                                            or c != c.strip() for c in frame.columns):
         raise ValueError(f"{path}: columns must have unique, nonempty string names without surrounding spaces")
-    required = {spec["target"], *spec["drop_columns"], *spec["categorical_columns"]}
+    structural = [spec[k] for k in ("time_column", "group_column") if k in spec]
+    required = {spec["target"], *spec["drop_columns"], *spec["categorical_columns"], *structural}
     if missing := required - set(frame.columns):
         raise ValueError(f"{path}: missing declared columns: {sorted(missing)}")
     if len(frame) < 4:
@@ -181,7 +214,23 @@ def _local_fetch(name):
             raise ValueError(f"{path}: classification needs at least 2 classes and 2 rows per class")
         if pd.api.types.is_numeric_dtype(y) and not np.isfinite(y).all():
             raise ValueError(f"{path}: classification labels must be finite")
-    X = frame.drop(columns=[spec["target"], *spec["drop_columns"]]).copy()
+    times = groups = None
+    if "time_column" in spec:
+        raw_t = frame[spec["time_column"]]
+        try:
+            times = (raw_t.to_numpy(dtype=float) if pd.api.types.is_numeric_dtype(raw_t)
+                     else pd.to_datetime(raw_t).astype("int64").to_numpy())
+            if raw_t.isna().any() or (times.dtype.kind == "f" and not np.isfinite(times).all()):
+                raise ValueError("missing values")
+        except (ValueError, TypeError, OverflowError) as e:
+            raise ValueError(f"{path}: time_column {spec['time_column']!r} must be numeric or parseable "
+                             f"dates with no missing values ({e})") from e
+    if "group_column" in spec:
+        raw_g = frame[spec["group_column"]]
+        if raw_g.isna().any():
+            raise ValueError(f"{path}: group_column {spec['group_column']!r} has missing values")
+        groups = raw_g.astype(str).to_numpy()
+    X = frame.drop(columns=[spec["target"], *spec["drop_columns"], *structural]).copy()
     if X.shape[1] == 0:
         raise ValueError(f"{path}: at least one feature must remain after dropping columns")
     for column in X:
@@ -200,6 +249,13 @@ def _local_fetch(name):
             raise ValueError(f"{path}: unsupported feature type {values.dtype} for {column!r}; "
                              "drop it or explicitly declare it categorical")
     X.attrs["quibble_source"] = _source(spec, path, raw)
+    kind = split_kind(spec)
+    X.attrs["quibble_split"] = {"kind": kind, **{k: spec[k] for k in ("time_column", "group_column")
+                                                   if k in spec}}
+    if times is not None:
+        X.attrs["quibble_times"] = times
+    if groups is not None:
+        X.attrs["quibble_groups"] = groups
     return X, y, name
 
 
@@ -240,11 +296,66 @@ def load(name, data_home=None):
     return X.reset_index(drop=True), y, task
 
 
+def _balanced_group_folds(groups, k, seed):
+    """Fold id per row; whole groups per fold, groups shuffled then placed in the smallest fold."""
+    uniq, inverse, counts = np.unique(groups, return_inverse=True, return_counts=True)
+    if len(uniq) < k:
+        raise ValueError(f"group split needs at least {k} distinct groups, found {len(uniq)}")
+    order = np.random.RandomState(seed).permutation(len(uniq))
+    load, fold_of = np.zeros(k), np.zeros(len(uniq), dtype=int)
+    for g in order:
+        f = int(np.argmin(load))
+        fold_of[g] = f
+        load[f] += counts[g]
+    return fold_of[inverse]
+
+
+def _split_positions(X, y, split_id, task, cv, cv_seed, cfg):
+    """Train and test row positions for the 'group' and 'temporal' schemes."""
+    n = len(X)
+    if cfg["kind"] == "group":
+        groups = X.attrs["quibble_groups"]
+        if cv == "holdout":
+            n_groups = len(np.unique(groups))
+            if n_groups < 2:
+                raise ValueError("group split needs at least 2 distinct groups")
+            k = min(10, n_groups)  # about 30% of the groups, as whole balanced folds, are the test set
+            te = np.flatnonzero(_balanced_group_folds(groups, k, split_id) < max(1, round(0.3 * k)))
+        else:
+            k, r = (int(v) for v in cv.split("x"))
+            repeat, f = divmod(split_id, k)
+            te = np.flatnonzero(_balanced_group_folds(groups, k, cv_seed + repeat) == f)
+        tr = np.setdiff1d(np.arange(n), te)
+    else:
+        order = np.argsort(X.attrs["quibble_times"], kind="stable")
+        if cv == "holdout":
+            cut = int(round(n * 0.7))
+            tr, te = order[:cut], order[cut:]
+        else:
+            k, r = (int(v) for v in cv.split("x"))
+            if r != 1:
+                raise ValueError("temporal splits use forward chaining, which has no repeats: "
+                                 f"use --cv {k}x1")
+            edges = np.linspace(0, n, k + 2).round().astype(int)
+            tr, te = order[:edges[split_id + 1]], order[edges[split_id + 1]:edges[split_id + 2]]
+    if len(tr) == 0 or len(te) == 0:
+        raise ValueError("split produced an empty train or test set; use fewer folds or more data")
+    if task == C and y.iloc[tr].nunique() < 2:
+        raise ValueError("the training part of this split contains fewer than 2 classes")
+    return np.sort(tr), np.sort(te)
+
+
 def split(X, y, split_id, task, cv="holdout", cv_seed=0):
     """Returns Xtr, Xte, ytr, yte, test_row_positions.
-    holdout: 70/30 split seeded by split_id. 'KxR': split_id-th fold of R repeats of K-fold CV.
+    random (default): holdout is a stratified 70/30 split seeded by split_id; 'KxR' is the split_id-th
+    fold of R repeats of K-fold CV. group: whole groups (group_column) stay on one side.
+    temporal: the future (time_column) is always the test set; 'Kx1' is forward chaining.
     The same split_id gives identical test rows for every backend."""
+    cfg = X.attrs.get("quibble_split") or {"kind": "random"}
     idx = np.arange(len(X))
+    if cfg["kind"] != "random":
+        tr, te = _split_positions(X, y, split_id, task, cv, cv_seed, cfg)
+        return X.iloc[tr], X.iloc[te], y.iloc[tr], y.iloc[te], te
     if task == C and "quibble_source" in X.attrs:
         minimum = 2 if cv == "holdout" else int(cv.split("x")[0])
         if y.value_counts().min() < minimum:
@@ -264,7 +375,7 @@ def split(X, y, split_id, task, cv="holdout", cv_seed=0):
 
 
 def meta(X, y, task):
-    cat = X.select_dtypes(include=["object", "category"]).shape[1]
+    cat = sum(1 for c in X.columns if is_categorical(X[c]))
     n = len(X)
     m = {"rows": n, "features": X.shape[1], "task": task,
          "cat_share": round(cat / X.shape[1], 3),

@@ -16,10 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
-from sklearn.metrics import (accuracy_score, log_loss, mean_absolute_error,
-                             mean_squared_error, r2_score, roc_auc_score)
-
 from .history import new_run_id, snapshot, timestamp
+from .metrics import score as metric_score
 
 FLAGS = {"device": "QUIBBLE_DEVICE", "jobs": "QUIBBLE_JOBS", "preprocess": "QUIBBLE_PREPROCESS",
          "split_seed": "QUIBBLE_SPLIT_SEED", "model_seeds": "QUIBBLE_MODEL_SEEDS",
@@ -48,7 +46,15 @@ def settings_differ(json_path, cfg):
         cur["tabfm_n_estimators"] = cfg.tabfm_n_estimators
     elif r.get("backend") == "kumo_tabular":
         cur.update(kumo_size=cfg.kumo_size, kumo_n_estimators=cfg.kumo_n_estimators)
+    elif r.get("backend") == "autogluon":
+        cur.update(ag_preset=cfg.ag_preset, ag_time_limit=cfg.ag_time_limit)
     differs = [k for k, v in cur.items() if r.get(k) not in (None, v)]
+    if r.get("backend") == "tabpfn" and "tabpfn_max_rows" in r and r["tabpfn_max_rows"] != cfg.tabpfn_max_rows:
+        differs.append("tabpfn_max_rows")
+    if r.get("single_n") not in (None, cfg.single_n):
+        differs.append("single_n")
+    if changed := package_changes(r):
+        differs.append("package_versions (" + ", ".join(changed) + ")")
     if r.get("dataset"):
         from .datasets import source_info
         try:
@@ -66,6 +72,30 @@ def settings_differ(json_path, cfg):
     return differs
 
 
+BACKEND_PACKAGES = {
+    "histgb": ("scikit-learn",), "weak": ("scikit-learn",), "dummy": ("scikit-learn",),
+    "linear": ("scikit-learn",), "lightgbm": ("lightgbm",), "catboost": ("catboost",),
+    "tabpfn": ("tabpfn", "torch"), "tabfm": ("tabfm", "torch"),
+    "kumo_tabular": ("structured-data-models", "torch"), "autogluon": ("autogluon.tabular",),
+}
+
+
+def package_changes(record):
+    """Libraries whose installed version differs from the one that produced a saved result."""
+    from .env_info import _ver
+    saved = ((record.get("env") or {}).get("packages")) or {}
+    names = ("numpy", "pandas") + BACKEND_PACKAGES.get(record.get("backend"), ())
+    return [f"{n} {saved[n]}->{_ver(n)}" for n in names if saved.get(n) and _ver(n) != saved[n]]
+
+
+def is_failed(json_path):
+    """True when a saved result is an error record (refusals are deterministic and are not retried)."""
+    try:
+        return "error" in json.loads(Path(json_path).read_text())
+    except (OSError, ValueError):
+        return False
+
+
 STALE_MSG = ("WARNING: {n} existing result(s) were produced with different settings ({keys}) "
              "and are being SKIPPED. Use --force to redo them, or a different --out per configuration.")
 
@@ -79,6 +109,29 @@ def peak_mb():
     return r / 1e6 if sys.platform == "darwin" else r / 1e3
 
 
+def current_rss_mb():
+    """Resident memory of this process now (not the high-water mark), or None if unavailable."""
+    try:
+        import psutil
+        return psutil.Process().memory_info().rss / 1e6
+    except ImportError:
+        pass
+    try:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1e6
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def save_npy(path, array):
+    """Write an .npy file atomically, so parallel workers never read a half-written split file."""
+    path = Path(path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    with open(tmp, "wb") as f:
+        np.save(f, array)
+    os.replace(tmp, path)
+
+
 def error_kind(error):
     message = str(error).lower()
     if isinstance(error, MemoryError) or any(term in message for term in
@@ -89,21 +142,10 @@ def error_kind(error):
 
 
 def metrics(y, P, task):
-    if task == "regression":
-        return {"rmse": float(np.sqrt(mean_squared_error(y, P))),
-                "mae": float(mean_absolute_error(y, P)), "r2": float(r2_score(y, P))}
-    P = np.clip(P, 1e-7, 1)
-    P = P / P.sum(1, keepdims=True)
-    k = P.shape[1]
-    out = {"accuracy": float(accuracy_score(y, P.argmax(1))),
-           "log_loss": float(log_loss(y, P, labels=list(range(k)))),
-           "brier": float(((P - np.eye(k)[y]) ** 2).sum(1).mean())}
-    try:
-        out["auc"] = float(roc_auc_score(y, P[:, 1]) if k == 2 else
-                           roc_auc_score(y, P, multi_class="ovr", labels=list(range(k))))
-    except ValueError:
-        out["auc"] = None
-    return out
+    """Per-split metrics, computed by quibble.metrics.score so run records and analysis agree."""
+    names = ("rmse", "mae", "r2") if task == "regression" else ("accuracy", "log_loss", "brier", "auc")
+    out = {n: metric_score(n, y, P) for n in names}
+    return {k: (None if v is None or not np.isfinite(v) else float(v)) for k, v in out.items()}
 
 
 def smoke_positions(y, limit, seed, task):
@@ -123,12 +165,14 @@ def smoke_positions(y, limit, seed, task):
         remaining, limit - len(required), replace=False)]).astype(int))
 
 
-def run_one(backend, dataset, ms, cfg, force=False):
+def run_one(backend, dataset, ms, cfg, force=False, retry_failed=False):
     from .backends import BACKENDS, Refused, device_exclusion
     from .datasets import load, split, validate_sources
     from .env_info import collect
     s = stem(cfg.out_dir, dataset, backend, cfg.split_seed, ms)
     js = s.with_suffix(".json")
+    if js.exists() and retry_failed and is_failed(js):
+        force = True
     if js.exists() and not force and not device_exclusion(backend, cfg.device):
         d = settings_differ(js, cfg)
         print(f"skip (done): {js.name}" + (f"  [WARNING: saved with different {', '.join(d)}]" if d else ""))
@@ -142,7 +186,11 @@ def run_one(backend, dataset, ms, cfg, force=False):
            "model_seed": ms, "cv": cfg.cv, "device_requested": cfg.device_requested, "device": cfg.device,
            "threads": cfg.threads, "jobs": cfg.jobs, "preprocess_requested": cfg.preprocess,
            "cv_seed": cfg.cv_seed, "run_type": cfg.run_type, "cache_dir": cfg.cache_dir,
+           "single_n": cfg.single_n, "seed_controlled": BACKENDS[backend].seed_controlled,
+           "backend_verification": BACKENDS[backend].verification,
            "env": collect(cfg.device == "cuda")}
+    if backend == "tabpfn":
+        res["tabpfn_max_rows"] = cfg.tabpfn_max_rows
     attempted = cfg.device
     res["device_attempted"] = attempted
     b = None
@@ -176,12 +224,17 @@ def run_one(backend, dataset, ms, cfg, force=False):
             torch.cuda.reset_peak_memory_stats()
             vram = True
         b = BACKENDS[backend]()
+        rss_before = current_rss_mb()
         t = time.perf_counter()
         b.fit(Xtr, ytr, task, ms, cfg, attempted)
-        res["fit_s"] = time.perf_counter() - t
+        res["fit_total_s"] = time.perf_counter() - t
+        res["load_s"] = float(b.load_s)
+        res["fit_s"] = max(res["fit_total_s"] - res["load_s"], 0.0)  # training only, weights excluded
         t = time.perf_counter()
         P = b.predict(Xte)
         res["predict_ms_per_row_batch"] = (time.perf_counter() - t) / len(Xte) * 1e3
+        for i in range(min(3, len(Xte))):  # warm-up: lazy initialisation must not count as latency
+            b.predict(Xte.iloc[[i]])
         lat = []
         for i in range(min(cfg.single_n, len(Xte))):
             t = time.perf_counter()
@@ -190,6 +243,9 @@ def run_one(backend, dataset, ms, cfg, force=False):
         res["single_row_p50_ms"] = float(np.percentile(lat, 50))
         res["single_row_p95_ms"] = float(np.percentile(lat, 95))
         res["peak_rss_mb"] = peak_mb()
+        if rss_before is not None:  # the model's own footprint, without interpreter and imports
+            res["rss_before_fit_mb"] = rss_before
+            res["peak_rss_increase_mb"] = max(res["peak_rss_mb"] - rss_before, 0.0)
         if vram:  # only counts PyTorch allocations made in this process
             res["peak_torch_vram_mb"] = torch.cuda.max_memory_allocated() / 1e6
         res.update(b.info)
@@ -210,9 +266,9 @@ def run_one(backend, dataset, ms, cfg, force=False):
                 res["model_retention"] = "unsupported"
                 print(f"WARNING: fitted-model retention is not supported for {backend}; "
                       "pretrained download caches are retained separately.", file=sys.stderr)
-        np.save(f"{s}.pred.npy", P)
-        np.save(s.parent / f"y_test_ss{cfg.split_seed}.npy", yte.to_numpy())
-        np.save(s.parent / f"idx_test_ss{cfg.split_seed}.npy", te_idx)
+        save_npy(f"{s}.pred.npy", P)
+        save_npy(s.parent / f"y_test_ss{cfg.split_seed}.npy", yte.to_numpy())
+        save_npy(s.parent / f"idx_test_ss{cfg.split_seed}.npy", te_idx)
     except Refused as e:
         res["refused"] = str(e)
     except Exception as e:
@@ -239,7 +295,7 @@ def run_one(backend, dataset, ms, cfg, force=False):
     sys.stdout.flush()
 
 
-def sweep(backends, datasets, cfg, force):
+def sweep(backends, datasets, cfg, force, retry_failed=False):
     from .backends import BACKENDS, select_backends
     requested_backends = list(backends)
     backends, excluded = select_backends(requested_backends, cfg.device)
@@ -250,8 +306,13 @@ def sweep(backends, datasets, cfg, force):
                          "Select CatBoost, TabPFN, TabFM or KumoTabular, or choose --device cpu.")
     cells = [(b, d, ms, ss) for d in datasets for b in backends for ms in cfg.model_seeds
              for ss in cfg.split_ids]
-    todo = [c for c in cells if force or
-            not stem(cfg.out_dir, c[1], c[0], c[3], c[2]).with_suffix(".json").exists()]
+    def finished(c):
+        return stem(cfg.out_dir, c[1], c[0], c[3], c[2]).with_suffix(".json")
+
+    retry = {c for c in cells if retry_failed and finished(c).exists() and is_failed(finished(c))}
+    todo = [c for c in cells if force or c in retry or not finished(c).exists()]
+    if retry and not force:
+        print(f"retrying {len(retry)} cell(s) whose saved result is an error (--retry-failed)")
     print(f"{len(todo)} to run, {len(cells) - len(todo)} already done "
           f"(device={cfg.device}, jobs={cfg.jobs}, threads={cfg.threads or 'all'})")
     stale = {k for c in cells if c not in todo
@@ -292,7 +353,7 @@ def sweep(backends, datasets, cfg, force):
     def work(c):
         b, d, ms, ss = c
         cmd = [sys.executable, "-m", "quibble.run", "--backend", b, "--dataset", d,
-               "--model-seed", str(ms)] + (["--force"] if force else [])
+               "--model-seed", str(ms)] + (["--force"] if force or c in retry else [])
 
         def failure(message, kind, **extra):
             s = stem(cfg.out_dir, d, b, ss, ms)
@@ -355,6 +416,8 @@ def main():
     ap.add_argument("--backends", help="comma list or 'all'")
     ap.add_argument("--datasets", help="comma list")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--retry-failed", action="store_true",
+                    help="rerun only cells whose saved result is an error (refusals are kept)")
     ap.add_argument("--keep-models", action="store_const", const="1", default=None,
                     help="retain fitted tree/AutoGluon models; foundation estimators are not serialized")
     ap.add_argument("--device", choices=["cpu", "cuda", "auto"])
@@ -382,11 +445,11 @@ def main():
         bs = [n for n, B in BACKENDS.items() if not getattr(B, "internal", False)] \
             if a.backends == "all" else a.backends.split(",")
         try:
-            sweep(bs, a.datasets.split(","), cfg, a.force)
+            sweep(bs, a.datasets.split(","), cfg, a.force, retry_failed=a.retry_failed)
         except ValueError as e:
             sys.exit(f"selection error: {e}")
     else:
-        run_one(a.backend, a.dataset, a.model_seed, cfg, a.force)
+        run_one(a.backend, a.dataset, a.model_seed, cfg, a.force, a.retry_failed)
 
 
 if __name__ == "__main__":

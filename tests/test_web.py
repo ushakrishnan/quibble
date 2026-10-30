@@ -397,6 +397,65 @@ def test_run_rejects_arbitrary_commands_and_unconfirmed_full(app):
                    "device": "cpu", "cv": "holdout"})
 
 
+@pytest.mark.parametrize("overrides", [None, {"max_quality_drop": 0.02}])
+def test_full_run_persists_effective_policy_and_passes_custom_file(app, monkeypatch, overrides):
+    from pathlib import Path
+    from quibble.thresholds import DEFAULTS
+    commands = []
+
+    def worker(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr("quibble.web.subprocess.run", worker)
+    assert app.state()["threshold_defaults"] == DEFAULTS
+    record = app.start({"dataset": "wine", "backends": ["histgb"], "mode": "full",
+                        "device": "cpu", "cv": "holdout", "full_confirmed": True,
+                        "thresholds": overrides})
+    app.thread.join(10)
+    saved = app.job(record["id"])
+    effective = {**DEFAULTS, **(overrides or {})}
+    assert saved["thresholds"] == effective
+    assert saved["thresholds_default"] is (overrides is None)
+    policy_path = app.root / record["id"] / "thresholds.json"
+    assert json.loads(policy_path.read_text()) == effective
+    command = commands[0]
+    if overrides:
+        assert Path(command[command.index("--thresholds") + 1]) == policy_path
+        assert "--require-thresholds" in command
+    else:
+        assert "--thresholds" not in command and "--require-thresholds" not in command
+    app.close()
+    restarted = Workbench()
+    try:
+        assert restarted.job(record["id"])["thresholds"] == effective
+    finally:
+        restarted.close()
+
+
+@pytest.mark.parametrize("overrides", [{}, [], {"typo": 1}, {"max_quality_drop": True},
+                                       {"confident_prob": 2}, {"primary": "rmse"}])
+def test_web_rejects_invalid_policy_before_creating_job(app, overrides):
+    with pytest.raises(ValueError):
+        app.start({"dataset": "wine", "backends": ["histgb"], "mode": "full",
+                   "device": "cpu", "cv": "holdout", "full_confirmed": True,
+                   "thresholds": overrides})
+    assert app.thread is None
+    assert not list(app.root.glob("*/job.json"))
+
+
+def test_smoke_does_not_apply_or_save_a_swap_policy(app, monkeypatch):
+    monkeypatch.setattr("quibble.web.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    body = {"dataset": "wine", "backends": ["histgb"], "mode": "smoke",
+            "device": "cpu", "cv": "holdout"}
+    with pytest.raises(ValueError, match="Smoke"):
+        app.start({**body, "thresholds": {"max_quality_drop": 0.02}})
+    record = app.start(body)
+    app.thread.join(10)
+    assert app.job(record["id"])["thresholds"] is None
+    assert not (app.root / record["id"] / "thresholds.json").exists()
+
+
 def test_previous_incomplete_status_is_explicit(app):
     path = app.root / "0123"
     path.mkdir()

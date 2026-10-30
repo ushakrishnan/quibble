@@ -165,6 +165,9 @@ Or create that declaration from PowerShell:
 | `task` | yes | Exactly `classification` or `regression`; never guessed from numeric labels |
 | `drop_columns` | no | Columns excluded before splitting/training; defaults to `[]` |
 | `categorical_columns` | no | Extra categorical declarations, including numeric codes; defaults to `[]` |
+| `time_column` | no | Numeric or date column that orders rows in time; excluded from features. Enables temporal splits |
+| `group_column` | no | Column identifying the customer, account or entity a row belongs to; excluded from features. Enables group splits and group-clustered intervals |
+| `split` | no | `random`, `group` or `temporal`. Default: `temporal` if `time_column` is set, else `group` if `group_column` is set, else `random` |
 
 All declared columns must exist. Column lists must be unique and must not overlap each
 other or the target. Unknown manifest keys are rejected so a typo cannot silently change
@@ -194,6 +197,35 @@ It replaces the example input file, so do not run it over your real table.
 ```powershell
 python -c "from pathlib import Path; import numpy as np; import pandas as pd; rng=np.random.default_rng(42); n=180; days=rng.integers(1,61,n); df=pd.DataFrame({'customer_id':['C'+str(i) for i in range(n)], 'amount':rng.uniform(20,500,n).round(2), 'days_open':days, 'region':rng.choice(['east','west'],n), 'paid_late':np.where(days>30,'yes','no')}); df.to_csv(Path('data')/'payments'/'data.csv',index=False)"
 ```
+
+### Group and temporal splits
+Rows are rarely independent. If several rows belong to one customer, or the model will predict the
+future from the past, a random split lets it train on information it would not have, and scores
+are inflated.
+
+- **Group split** (`group_column`): whole groups stay on one side of every split. Holdout uses about 30%
+  of the groups as the test set; `--cv KxR` assigns shuffled, size-balanced groups to K folds per
+  repeat. Bootstrap intervals resample whole groups, so correlated rows are not treated as independent.
+- **Temporal split** (`time_column`): the future is always the test set. Holdout tests on the latest
+  30% of rows; `--cv Kx1` is forward chaining (train on everything before each of K consecutive test
+  blocks). Temporal splits have no repeats, so `--cv 5x2` is rejected; use `--cv 5x1`.
+- Set `"split": "random"` to reproduce a naive baseline on the same data; quibble then flags
+  time-like column names.
+
+```json
+{
+  "file": "invoices.csv",
+  "target": "paid_late",
+  "task": "classification",
+  "drop_columns": ["invoice_id"],
+  "time_column": "issued_on",
+  "group_column": "customer_id"
+}
+```
+With both columns declared, `split` defaults to `temporal`; the group column still clusters the
+bootstrap. The split scheme is part of the dataset fingerprint, so changing it requires a new
+`--out`. Before training, quibble also prints [data flags](analysis.md#data-flags) for suspicious
+columns.
 
 ## 5. Discover and validate before training
 
@@ -302,21 +334,25 @@ python -m quibble analyze --dataset payments --out results_payments --metric log
 Report regeneration uses its default primary metric again; it does not inherit the previous
 analysis command's `--metric`. To change the swap quality metric, set `primary` in a thresholds file.
 
-To customize replacement limits, copy the example and edit it before evaluating:
+To customize replacement limits, export the
+[packaged defaults](../quibble/swap_thresholds.json) and edit the copy before evaluating:
 
 ```powershell
-Copy-Item .\swap_thresholds.example.json .\payments_limits.json
-python -m quibble swap --dataset payments --incumbent histgb --candidate lightgbm --out results_payments --thresholds payments_limits.json
+python -m quibble swap --export-thresholds payments_limits.json
+python -m quibble swap --dataset payments --incumbent histgb --candidate lightgbm --out results_payments --thresholds payments_limits.json --require-thresholds
 ```
 
 Swap returns 0 for PASS, 1 for FAIL, and 2 for INCONCLUSIVE. A policy FAIL does not mean
 training failed. PASS is not a production-safety guarantee or proof that the data has no leakage.
 Review limits against the actual cost of changing predictions.
+The [workbench policy controls](swap.md#workbench) can edit/import the same JSON for full runs;
+reports show effective limits, including defaults retained for omitted keys.
 
 ## 9. Reuse, retry, and reproduce
 
-- Repeating the same benchmark reuses saved cells, including errors. `--force` retries
-  selected cells; it does not force another checkpoint download.
+- Repeating the same benchmark reuses saved cells, including errors. `--retry-failed` reruns only
+  the cells whose saved result is an error; `--force` reruns every selected cell. Neither forces
+  another checkpoint download.
 - Local records save input SHA-256, a fingerprint of file content plus manifest settings,
   task, target, column rules, and the original classification labels.
 - Source changes are not silently accepted as the old experiment. If file content, target,

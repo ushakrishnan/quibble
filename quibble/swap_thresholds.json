@@ -7,5 +7,8 @@
   "max_memory_ratio": 1.5,
   "max_slice_drop": 0.05,
   "min_slice_n": 30,
-  "max_ece_increase": 0.02
+  "max_ece_increase": 0.02,
+  "confident_prob": 0.9,
+  "regression_gap_std": 0.25,
+  "near_margin": 0.2
 }

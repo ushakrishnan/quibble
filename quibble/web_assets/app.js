@@ -10,6 +10,74 @@ let dataPath = "existing", readyDataset = "";
 let lastWorkflowView = "data";
 let variantOriginal = null;
 let variantSpecification = null;
+let thresholdDefaults = null, savedThresholds = null;
+function effectiveThresholds() {
+  if (!thresholdDefaults) throw new Error("Threshold defaults have not loaded. Refresh before running.");
+  if ($("threshold-mode").value === "defaults") return {...thresholdDefaults};
+  const overrides = JSON.parse($("thresholds").value);
+  if (!overrides || Array.isArray(overrides) || typeof overrides !== "object" || !Object.keys(overrides).length) {
+    throw new Error("Custom thresholds must be a non-empty JSON object.");
+  }
+  for (const key of Object.keys(overrides)) {
+    if (!Object.hasOwn(thresholdDefaults, key)) throw new Error(`Unknown threshold key: ${key}`);
+    const value = overrides[key];
+    if (key !== "primary" && (typeof value !== "number" || !Number.isFinite(value))) {
+      throw new Error(`${key} must be a finite number.`);
+    }
+  }
+  return {...thresholdDefaults, ...overrides};
+}
+function updateThresholds() {
+  const smoke = $("mode").value === "smoke", custom = $("threshold-mode").value === "custom";
+  $("threshold-controls").disabled = smoke;
+  $("thresholds").readOnly = !custom;
+  $("threshold-file").disabled = !custom;
+  try {
+    $("effective-thresholds").textContent = JSON.stringify(effectiveThresholds(), null, 2);
+    $("threshold-status").textContent = smoke ? "Inactive: smoke runs do not perform swap checks." :
+      custom ? "Custom policy. The server validates all values before training; omitted keys retain defaults." :
+        "Using packaged defaults. Review these limits against your application's costs.";
+    $("threshold-status").classList.remove("error");
+  } catch (error) {
+    $("effective-thresholds").textContent = "";
+    $("threshold-status").textContent = error.message;
+    $("threshold-status").classList.add("error");
+  }
+}
+function downloadJSON(value, name) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) + "\n"],
+    {type: "application/json;charset=utf-8"}));
+  const link = document.createElement("a"); link.href = url; link.download = name; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$("mode").addEventListener("change", updateThresholds);
+$("threshold-mode").onchange = () => {
+  if ($("threshold-mode").value === "defaults") {
+    $("thresholds").value = JSON.stringify(thresholdDefaults, null, 2);
+    $("threshold-file").value = "";
+  }
+  updateThresholds();
+};
+$("thresholds").oninput = updateThresholds;
+$("reset-thresholds").onclick = () => {
+  $("threshold-mode").value = "defaults";
+  $("thresholds").value = JSON.stringify(thresholdDefaults, null, 2);
+  $("threshold-file").value = "";
+  updateThresholds();
+};
+$("threshold-file").onchange = () => busy($("download-thresholds"), async () => {
+  const file = $("threshold-file").files[0];
+  if (!file) return;
+  if (file.size > 16000) throw new Error("Threshold JSON must be no larger than 16,000 bytes.");
+  $("thresholds").value = await file.text();
+  updateThresholds();
+  effectiveThresholds();
+});
+$("download-thresholds").onclick = () => busy($("download-thresholds"), async () =>
+  downloadJSON(effectiveThresholds(), "quibble-limits.json"));
+$("download-job-thresholds").onclick = () => {
+  if (savedThresholds) downloadJSON(savedThresholds, "quibble-saved-limits.json");
+};
 function showWorkflow(view) {
   if (view !== "history") lastWorkflowView = view;
   $("workflow-steps").hidden = view === "history";
@@ -322,6 +390,12 @@ async function refreshState(selectedDataset, selectedJob) {
     throw new Error("Restart the Quibble web server and reload this page to enable the updated GPU-only device policy.");
   }
   deviceState = state;
+  if (!state.threshold_defaults) throw new Error("Restart the web server to load packaged swap thresholds.");
+  if (!thresholdDefaults) {
+    thresholdDefaults = state.threshold_defaults;
+    $("thresholds").value = JSON.stringify(thresholdDefaults, null, 2);
+  }
+  updateThresholds();
   updateRunning(state.jobs.find(j => ["queued", "running"].includes(j.status)));
   $("provider").textContent = state.provider.configured ?
     `Planner: ${state.provider.name} | Model: ${state.provider.model} | Authentication: ${state.provider.authentication}${state.provider.authentication === "aad" ? ` (${state.provider.credential})` : ""} | ${state.provider.endpoint}` :
@@ -540,11 +614,17 @@ $("discard-variant").onclick = () => busy($("discard-variant"), async () => {
 });
 $("run").onclick = () => busy($("run"), async () => {
   if (!readyDataset) throw new Error("Choose and review data before configuring an experiment.");
+  let thresholds = null;
+  if ($("mode").value === "full" && $("threshold-mode").value === "custom") {
+    effectiveThresholds();
+    thresholds = JSON.parse($("thresholds").value);
+  }
   startingExperiment = true; updateRunning(activeExperiment);
   try {
   const result = await api("/api/run", {dataset: readyDataset,
     backends: [...$("methods").querySelectorAll("input:checked:not(:disabled)")].map(e => e.value),
     mode: $("mode").value, device: $("device").value, cv: $("cv").value,
+    thresholds,
     full_confirmed: $("full-confirmed").checked});
   await refreshState(undefined, result.id);
   showWorkflow("results");
@@ -560,6 +640,8 @@ async function refreshJob() {
     $("job-return").replaceChildren();
     $("log").textContent = "Choose an experiment.";
     $("report").replaceChildren();
+    $("job-policy").hidden = true;
+    savedThresholds = null;
     reportText = "";
     $("download-report").disabled = true;
     const url = new URL(location.href);
@@ -568,6 +650,12 @@ async function refreshJob() {
     return null;
   }
   const job = await api(`/api/jobs/${encodeURIComponent($("jobs").value)}`);
+  savedThresholds = job.thresholds || null;
+  $("job-policy").hidden = !savedThresholds;
+  $("job-thresholds").textContent = savedThresholds ? JSON.stringify(savedThresholds, null, 2) : "";
+  $("job-policy-source").textContent = job.thresholds_default ?
+    "Packaged defaults at run time. Review for your application; PASS is not a production-safety guarantee." :
+    "Custom policy used for this experiment.";
   const link = document.createElement("a");
   link.href = bookmarkJob(job.id); link.textContent = `Bookmark experiment ${job.id}`;
   $("job-return").replaceChildren(link, document.createTextNode(

@@ -6,7 +6,7 @@ import sys
 from . import __version__
 
 COMMANDS = {"run": "quibble.run", "compare": "quibble.compare", "analyze": "quibble.analyze",
-            "swap": "quibble.swap", "report": "quibble.report", "datasets": "quibble.datasets",
+            "swap": "quibble.swap", "gate": "quibble.gate", "report": "quibble.report", "datasets": "quibble.datasets",
             "doctor": "quibble.env_info", "benchmark": "quibble.benchmark",
             "generate": "quibble.generate", "web": "quibble.web", "auth": "quibble.planner"}
 USAGE = """quibble: what changes when you swap tabular backends?
@@ -17,9 +17,10 @@ USAGE = """quibble: what changes when you swap tabular backends?
   quibble compare --dataset D  quick summary of a single split
   quibble analyze --dataset D  CIs, calibration, slices, disagreement CSVs
   quibble swap --incumbent A --candidate B --dataset D   PASS/FAIL/INCONCLUSIVE (exit 0/1/2)
+  quibble gate --candidate B --dataset D   does B beat a simple baseline? (exit 0/1/2)
   quibble report               Markdown report with figures
   quibble datasets --verify    check the OpenML registry
-  quibble doctor               show device, torch/CUDA and free VRAM
+  quibble doctor               show device, torch/CUDA, free VRAM and backend verification status
   quibble web --open           localhost scenario generation, review, experiments, and reports
   quibble generate --spec S    generate a reviewed synthetic specification locally
   quibble auth                explicit Azure sign-in and token check (--check for no login)
@@ -37,6 +38,7 @@ def demo(argv):
     ap.add_argument("--backends", default=DEMO_BACKENDS,
                     help="comma-separated backend names (default: %(default)s); optional models need their packages")
     ap.add_argument("--force", action="store_true", help="rerun saved results, including cached errors")
+    ap.add_argument("--retry-failed", action="store_true", help="rerun only cells whose saved result is an error")
     a = ap.parse_args(argv)
     from .backends import BACKENDS
     names = [name.strip() for name in a.backends.split(",")]
@@ -57,7 +59,7 @@ def demo(argv):
     from .run import sweep
     cfg = Config.from_env()
     print(f"Demo backends: {', '.join(backends)} (CPU)")
-    sweep(backends, DEMO_DATASETS.split(","), cfg, a.force)
+    sweep(backends, DEMO_DATASETS.split(","), cfg, a.force, retry_failed=a.retry_failed)
     path = build(cfg.out_dir, DEMO_DATASETS.split(","), swaps=swaps)
     print(f"\nDemo report: {path}")
     if ("histgb", "weak") in swaps:

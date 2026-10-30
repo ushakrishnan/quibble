@@ -50,6 +50,16 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 Invalid values (`QUIBBLE_DEVICE=tpu`, `QUIBBLE_CV=five`, ...) stop the run with a `config error`.
 
+## Swap acceptance policy
+
+Swap limits are separate from environment settings. The packaged
+[swap_thresholds.json](../quibble/swap_thresholds.json) supplies defaults shared by the CLI and UI.
+Export with `quibble swap --export-thresholds limits.json`, review and edit the copy, then pass
+`--thresholds limits.json` to `swap`, `report`, or a full `benchmark`. Missing keys inherit
+defaults; files are never auto-discovered. `--require-thresholds` requires a non-empty explicit
+policy. In the workbench, full-run policy controls support editing, import, download, and
+per-experiment persistence. See [Swap checks](swap.md#changing-the-limits) for meanings and validation.
+
 ## Scenario-planning providers
 
 These settings affect specification drafting only, not the prediction methods being compared.

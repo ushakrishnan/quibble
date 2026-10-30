@@ -42,13 +42,15 @@ quibble run --sweep --backends all --datasets breast_cancer       # 'all' exclud
 | `--threads N` | Threads per run (0 = all, or cores/jobs when jobs > 1). |
 | `--timeout S` | Per-run timeout in sweeps (0 = none). A timeout is recorded as an error result. |
 | `--force` | Re-run cells that already have results. |
+| `--retry-failed` | Re-run only cells whose saved result is an error (timeouts, out-of-memory, missing packages). Refusals are kept. |
 | `--keep-models` | Retain fitted tree/AutoGluon models outside timed measurements; foundation estimators are not serialized. |
 | `--out DIR` | Output directory (default `results`). |
 
 Behaviour worth knowing:
-- Finished runs are skipped. If their saved device, preprocessing mode, or CV scheme differs from the
-  current settings, quibble prints a **WARNING** (they are still skipped; use `--force` or a different
-  `--out`).
+- Finished runs are skipped, **including saved errors** (use `--retry-failed` to rerun only those). If
+  their saved device, preprocessing mode, CV scheme, model-specific settings, dataset fingerprint or
+  installed library versions differ from the current settings, quibble prints a **WARNING** (they
+  are still skipped; use `--force` or a different `--out`).
 - On `cuda`, GPU-capable backends run one at a time even when `--jobs` > 1.
 - A backend refusing a dataset, or crashing, produces a result file with `refused` or `error`; the
   sweep carries on.
@@ -66,17 +68,40 @@ excluded. See [Analysis](analysis.md).
 
 ## `quibble swap`
 ```bash
-quibble swap --incumbent histgb --candidate lightgbm --dataset credit-g [--model-seed 0] [--thresholds limits.json]
+quibble swap --incumbent histgb --candidate lightgbm --dataset credit-g [--model-seed 0] [--thresholds limits.json] [--require-thresholds]
 ```
 Prints a table of checks and an overall verdict. **Exit code: 0 = PASS, 1 = FAIL, 2 = INCONCLUSIVE**
-(also 1 if the incumbent has no usable runs). See [Swap checks](swap.md).
+(also 1 if the incumbent has no usable runs or `--require-thresholds` is set without `--thresholds`).
+Without `--thresholds` the output identifies the
+[packaged defaults](../quibble/swap_thresholds.json); every effective setting is printed.
+These limits need application-specific review. Export an editable copy without training:
+
+```powershell
+quibble swap --export-thresholds limits.json
+```
+
+Export refuses to overwrite an existing file. `--require-thresholds` rejects missing or empty
+policies, not just missing filenames. See [Swap checks](swap.md).
+
+## `quibble gate`
+```bash
+quibble gate --candidate lightgbm --dataset credit-g [--baseline linear] [--min-gain 0.01] [--model-seed 0] [--metric auc] [--out DIR]
+```
+Does the candidate beat a simple baseline (`linear`, or `dummy`) by at least `--min-gain`, with the
+whole interval above that margin? Run both models first (for example
+`quibble run --sweep --backends linear,lightgbm --datasets credit-g --cv 5x2`). **Exit code: 0 = PASS,
+1 = FAIL (not confidently better), 2 = INCONCLUSIVE.** "Nothing here is worth using" is a valid
+outcome. See [Swap checks](swap.md) for how the interval is built.
 
 ## `quibble report`
 ```bash
-quibble report [--datasets a,b] [--swap histgb:lightgbm]... [--thresholds limits.json] [--report-dir DIR]
+quibble report [--datasets a,b] [--swap histgb:lightgbm]... [--thresholds limits.json] [--require-thresholds] [--report-dir DIR]
 ```
 Writes `<out>/report/report.md` and figures. `--swap` can be repeated and is evaluated for every
-dataset. Without `--datasets`, every dataset folder with results is included. See [Reports](reports.md).
+dataset. Without `--datasets`, every dataset folder with results is included.
+Reports show the effective policy and whether defaults or custom settings were used.
+`--require-thresholds` requires a non-empty explicit policy before report generation.
+See [Reports](reports.md).
 
 ## `quibble compare`
 Quick single-split summary: mean metrics per backend, refusals and errors, and pairwise disagreement
@@ -113,7 +138,7 @@ when free VRAM is low (another process may be holding the GPU).
 
 ## `quibble demo`
 ```bash
-quibble demo [--out results] [--cv 3x2] [--jobs 2] [--backends histgb,lightgbm,weak] [--force]
+quibble demo [--out results] [--cv 3x2] [--jobs 2] [--backends histgb,lightgbm,weak] [--force] [--retry-failed]
 ```
 End-to-end demonstration on `breast_cancer`, `wine`, and `diabetes_reg`; forces
 `QUIBBLE_DEVICE=cpu` and model seed 0. The default backends run offline without PyTorch.
@@ -128,8 +153,8 @@ The report checks swaps from HistGB to the other selected backends, or from the 
 selected backend if HistGB is absent. The weak-candidate sanity message only appears when
 both HistGB and Weak are selected. A single backend produces a report without swap checks.
 
-Saved results, including errors, are skipped. `--force` reruns every selected cell, which
-lets you retry cached import failures after switching environments. Prefer a separate
+Saved results, including errors, are skipped. `--retry-failed` reruns only the saved errors (for
+example cached import failures after switching environments); `--force` reruns every selected cell. Prefer a separate
 `--out` only when intentionally isolating a comparison. By default, demo uses the same
 `QUIBBLE_OUT_DIR` (or `results`) as run and report. Existing backend results in that directory
 also appear in its report. Dated snapshots preserve overwritten outputs and regenerated
@@ -145,15 +170,23 @@ python -m quibble benchmark --preset foundations --device cuda --force
 python -m quibble benchmark --backends histgb,autogluon --cv holdout --keep-models
 ```
 
+`--retry-failed` reruns only cells whose saved result is an error.
+
 Presets: `trees` selects HistGB/LightGBM/CatBoost; `foundations` (default) selects
 HistGB/LightGBM/TabFM/KumoTabular; `all` selects all public backends. `--backends` overrides
 the preset. `--datasets` defaults to `wine`, `--cv` to `3x2`, and `--model-seeds` to `0`.
 Device and parallelism follow `.env` unless overridden with `--device`, `--jobs`, or `--threads`.
 `--out`, `--force`, and `--keep-models` work as with run.
 
+Full runs accept `--thresholds limits.json` for custom swap limits and
+`--require-thresholds` to require a non-empty explicit policy. Invalid policies are rejected
+before training. The generated report lists all effective settings and their source.
+Without a custom policy, the [packaged defaults](../quibble/swap_thresholds.json) apply.
+
 `--smoke` fixes holdout/seed 0, caps training/test rows at 128/32, and creates a unique
 `<out>/smoke/<id>/` directory. Smoke reports interpret the bounded setup measurements but
 do not provide deployment recommendations or swap verdicts. Downloads and authentication may still be needed.
+Smoke rejects threshold options because no swap checks are run.
 Preset reports exclude incompatible cached backends, show participation and failure
 status, and include AutoGluon validation leaderboard links when available.
 
@@ -208,6 +241,7 @@ Neither establishes live provider access. See [provider setup](experiment-workbe
 | Command | Codes |
 |---|---|
 | `swap` | 0 PASS, 1 FAIL or unusable incumbent, 2 INCONCLUSIVE |
+| `gate` | 0 PASS, 1 FAIL, 2 INCONCLUSIVE |
 | `benchmark` | 0 all requested fits completed; 1 failed, refused, missing or incompatible cells; 2 configuration/usage error |
 | `datasets --verify` | 0 all selected entries loaded and names matched; 1 any load failure or name mismatch |
 | others | 0 success; non-zero on configuration or usage errors |
