@@ -17,7 +17,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 from . import __version__, datasets, planner, generate
 from .cache import project_path
 from .history import new_run_id
-from .thresholds import DEFAULTS, resolve_thresholds, validate_primary
+from .thresholds import DEFAULTS, policy_provenance, resolve_thresholds, validate_primary
 
 logger = logging.getLogger(__name__)
 ASSETS = Path(__file__).with_name("web_assets")
@@ -89,7 +89,8 @@ def render_report(markdown, identifier, figures, *, local_links=None, local_imag
 def documentation_files():
     paths = [*DOCS.glob("*.md"), *DOCS.glob("blog/*.md"),
              *DOCS.glob("assets/blog/*.png"), *DOCS.glob("assets/blog/*.svg"),
-             *DOCS.glob("assets/blog/*.csv"), *DOCS.glob("assets/blog/*.json")]
+             *DOCS.glob("assets/blog/*.csv"), *DOCS.glob("assets/blog/*.json"),
+             *DOCS.glob("assets/screenshots/*.png")]
     return {"/docs/" + path.relative_to(DOCS).as_posix(): path for path in paths}
 
 
@@ -176,9 +177,10 @@ def render_document(route, path, files, *, source_links=None):
     sidebar, on_page, pagination, group = document_navigation(route, files, content)
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<title>{title} | Quibble</title><link rel="stylesheet" href="/style.css"></head>'
-            f'<body>{render_header("blog" if route.startswith("/docs/blog/") else "docs")}'
-            '<a class="skip-link" href="#document-content">Skip to content</a>'
+            f'<title>{title} | Quibble</title><script src="/theme.js"></script>'
+            '<link rel="stylesheet" href="/style.css"></head>'
+            '<body><a class="skip-link" href="#document-content">Skip to content</a>'
+            f'{render_header("blog" if route.startswith("/docs/blog/") else "docs")}'
             f'<main class="docs-layout">{sidebar}<div class="docs-reading">'
             f'<nav class="docs-breadcrumb" aria-label="Breadcrumb">'
             f'<a href="{"/blog" if route.startswith("/docs/blog/") else "/docs/README.md"}">'
@@ -393,12 +395,14 @@ class Workbench:
             command += ["--cv", body["cv"]]
             self._write(directory / "thresholds.json", effective)
             if overrides is not None:
-                command += ["--thresholds", str(directory / "thresholds.json"), "--require-thresholds"]
+                self._write(directory / "threshold_overrides.json", overrides)
+                command += ["--thresholds", str(directory / "threshold_overrides.json"), "--require-thresholds"]
         record = {"id": identifier, "dataset": name, "backends": methods, "device": body["device"],
                   "device_resolved": resolved, "included_backends": included, "excluded_backends": excluded,
                   "mode": body["mode"], "status": "queued", "exit_code": None,
                   "thresholds": effective if body["mode"] == "full" else None,
                   "thresholds_default": not overrides if body["mode"] == "full" else None,
+                  "threshold_provenance": policy_provenance(overrides) if body["mode"] == "full" else None,
                   "report_available": False, "error": None}
         self._write(directory / "job.json", record)
         self.active = identifier
@@ -552,6 +556,7 @@ class Handler(BaseHTTPRequestHandler):
                      "/workbench": ("index.html", "text/html; charset=utf-8"),
                      "/about": ("about.html", "text/html; charset=utf-8"),
                      "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                     "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
                      "/landing.js": ("landing.js", "text/javascript; charset=utf-8"),
                      "/style.css": ("style.css", "text/css; charset=utf-8")}
             if route not in files:

@@ -14,6 +14,7 @@ def analysis(metric="accuracy", values=(0.90, 0.95), names=("fast", "quality")):
                                  "ci_lo": np.array(values) - 0.1,
                                  "ci_hi": np.array(values) + 0.1}),
         "dropped": {}, "pairs": [], "calibration": [], "slices": pd.DataFrame(),
+        "split": {"kind": "random"}, "flags": [],
         "meta": {"rows": 100, "features": 4, "tier": "small",
                  "cat_share": 0.0, "missing_share": 0.0},
     }

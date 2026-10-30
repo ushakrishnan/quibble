@@ -19,7 +19,7 @@ from .backends import BACKENDS
 from .config import analysis_settings
 from .history import snapshot
 from .swap import SwapError, evaluate
-from .thresholds import DEFAULT_SOURCE, load_thresholds, resolve_thresholds
+from .thresholds import describe_policy, load_thresholds, resolve_thresholds
 
 MORE_BETTER = {"accuracy", "auc", "r2"}
 
@@ -309,7 +309,8 @@ def interpretation(res, cost, runs, swap_results, smoke=False):
         lines.append("- Some runs failed, refused, or lost splits during alignment. The quality "
                      "comparison uses common successful splits; partial coverage is not "
                      "deployment readiness. Check the failure matrix.")
-    lines.append("\nQuality uncertainty reflects test-row sampling, not full retraining variability. "
+    lines.append("\nQuality-table intervals reflect test-row or group sampling, not full retraining "
+                 "variability. Swap checks may also use approximate corrected split intervals. "
                  "Marginal confidence-interval overlap alone does not decide a paired difference. "
                  "Validate on representative application data and tune swap limits to actual needs. "
                  "Resource figures include process overhead and are not production service budgets.\n")
@@ -460,6 +461,13 @@ def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), t
                   f"({mt['tier']}), categorical share {mt['cat_share']}, missing share "
                   f"{mt['missing_share']}. {len(res['splits'])} splits, model seed "
                   f"{res['model_seed']}.*\n")
+        md.append("### Evaluation design and data flags\n\n"
+                  f"Declared split: `{json.dumps(res['split'], sort_keys=True)}`.\n")
+        if res["flags"]:
+            md.append(md_table(pd.DataFrame(res["flags"])) + "\n")
+        md.append("Data flags are informational and do not change the verdict; no flags does not "
+                  "prove absence of leakage. Temporal splits do not make a row bootstrap account "
+                  "for serial dependence.\n")
         source = res.get("dataset_source")
         if source:
             if source.get("synthetic"):
@@ -512,14 +520,19 @@ def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), t
                 r = evaluate(ds, inc, cand, res["model_seed"], out, thresholds, require_thresholds)
                 swap_results.append((inc, cand, r))
                 ct = pd.DataFrame([{"verdict": c["verdict"], "check": c["check"],
-                                    "observed": c["observed"], "limit": c["limit"]}
+                                    "observed": c["observed"], "limit": c["limit"], "note": c["note"]}
                                    for c in r["checks"]])
                 md.append(f"### Swap check: {inc} -> {cand}: **{r['overall']}**\n\n{md_table(ct)}\n")
-                source = f"Packaged defaults (`{DEFAULT_SOURCE}`)" if r["thresholds_default"] else (
-                    "Custom policy; omitted keys use packaged defaults")
+                source = describe_policy(r["threshold_provenance"])
                 md.append(f"{source}. Review these limits for your application; "
                           "PASS is not a production-safety guarantee.\n")
-                policy = pd.DataFrame([{"setting": key, "value": json.dumps(value)}
+                md.append(f"Swap evaluation design: `{json.dumps(r['split'], sort_keys=True)}`.\n")
+                if r["flags"]:
+                    md.append("Data flags accompanying this verdict:\n\n"
+                              + md_table(pd.DataFrame(r["flags"])) + "\n")
+                provided = set(r["threshold_provenance"]["provided"])
+                policy = pd.DataFrame([{"setting": key, "value": json.dumps(value),
+                                        "origin": "explicit" if key in provided else "packaged default"}
                                        for key, value in r["thresholds"].items()])
                 md.append("Effective swap thresholds (`primary: null` selects accuracy for "
                           f"classification or RMSE for regression):\n\n{md_table(policy)}\n")
@@ -553,6 +566,17 @@ def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), t
              + (f"; git {env['git']}" if env.get("git") else "") + "\n")
     L.append("## Model participation\n\n" +
              md_table(participation(out, datasets, runs_by, analyses, invocation)) + "\n")
+    mismatches = [c for c in invocation.get("cells", [])
+                  if c.get("dataset") in datasets and c.get("execution") == "incompatible settings"]
+    if mismatches:
+        rows = [{"dataset": c["dataset"], "backend": c["backend"], "split": c["split_seed"],
+                 "model seed": c["model_seed"], "mismatched settings": ", ".join(c["differences"])}
+                for c in mismatches]
+        L.append("## Saved-setting mismatches\n\n"
+                 "These saved results were skipped, not newly evaluated under the requested "
+                 "configuration. Any retained comparison describes the saved settings, not the "
+                 "new request. Use `--force` or an isolated `--out` to evaluate changed settings.\n\n"
+                 + md_table(pd.DataFrame(rows)) + "\n")
     L.append(device_summary(runs_all))
     failures = [{"dataset": r["dataset"], "backend": r["backend"],
                  "split": r["split_seed"], "model seed": r["model_seed"],
@@ -579,13 +603,18 @@ def build(out=None, datasets=None, report_dir=None, model_seed=None, swaps=(), t
     if skipped:
         L.append("## Skipped datasets\n\n" + "\n".join(f"- {d}: {e}" for d, e in skipped) + "\n")
     L.append("## How to read this\n\n"
-             "- Intervals are a bootstrap over data rows. They reflect test-set noise, **not** "
-             "training-set variability; compare against `split_std`.\n"
+             "- Quality-table intervals bootstrap rows or declared groups, counting test-set noise. "
+             "Swap checks also use approximate corrected split intervals with 5+ usable splits; "
+             "per-check notes identify when retraining variability is not counted.\n"
+             "- The combined decision rule is not calibrated for false-PASS or false-FAIL rates. "
+             "Serial dependence and target-driven slice selection need further validation.\n"
              "- \"Disputed\" for classification means the predicted classes differ; for regression "
              "it means a gap above 0.25 target standard deviations.\n"
-             "- Slice figures count pooled predictions; the worst slice in a swap check is not "
-             "corrected for multiple comparisons.\n"
-             "- Latency and memory are single-machine measurements.\n")
+             "- Slice sizes count distinct rows. Worst-slice bootstrap samples recompute the maximum "
+             "over fixed, target-selected masks; this is exploratory, not established family-wise coverage.\n"
+             "- Latency and memory are single-machine measurements. Baseline-adjusted process peak "
+             "includes imports, inference and lifetime high-water marks; it is not model-only memory. "
+             "Swap ratios floor estimates below 50 MB; raw estimates and limits remain visible.\n")
     if plt is None:
         L.append("\n*Figures skipped: matplotlib is not installed (`pip install quibble[report]`).*\n")
     path = rdir / "report.md"
@@ -608,7 +637,7 @@ def main():
     ap.add_argument("--swap", action="append", default=[], help="INCUMBENT:CANDIDATE (repeatable)")
     ap.add_argument("--thresholds", help="JSON file for swap limits")
     ap.add_argument("--require-thresholds", action="store_true",
-                    help="require an explicit non-empty swap policy")
+                    help="require a non-empty policy; partial overrides still inherit listed defaults")
     a = ap.parse_args()
     swaps = [tuple(s.split(":", 1)) for s in a.swap]
     try:

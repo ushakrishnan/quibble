@@ -82,6 +82,7 @@ quibble swap --export-thresholds limits.json
 
 Export refuses to overwrite an existing file. `--require-thresholds` rejects missing or empty
 policies, not just missing filenames. See [Swap checks](swap.md).
+Partial policies remain allowed; their inherited packaged defaults are listed explicitly.
 
 ## `quibble gate`
 ```bash
@@ -91,7 +92,11 @@ Does the candidate beat a simple baseline (`linear`, or `dummy`) by at least `--
 whole interval above that margin? Run both models first (for example
 `quibble run --sweep --backends linear,lightgbm --datasets credit-g --cv 5x2`). **Exit code: 0 = PASS,
 1 = FAIL (not confidently better), 2 = INCONCLUSIVE.** "Nothing here is worth using" is a valid
-outcome. See [Swap checks](swap.md) for how the interval is built.
+outcome. Incomplete candidate or baseline coverage produces FAIL even when quality on common
+successful splits passes. Required split IDs include saved baseline records and matching
+invocation cells, not guessed contiguous IDs. The CLI lists missing/error/refusal/artifact
+reasons; the Python result separates `quality_verdict` from `overall` and includes `coverage`.
+See [Swap checks](swap.md) for how the interval is built.
 
 ## `quibble report`
 ```bash

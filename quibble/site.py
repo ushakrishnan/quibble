@@ -85,9 +85,11 @@ def build_site(output, base_path="/quibble"):
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>Run the workbench locally | Quibble</title>'
+        '<script src="/theme.js"></script>'
         '<link rel="stylesheet" href="/style.css"></head><body>'
+        '<a class="skip-link" href="#local-workbench">Skip to content</a>'
         + render_header("workbench")
-        + '<main><section><h2>Run the workbench on your machine</h2>'
+        + '<main id="local-workbench" tabindex="-1"><section><h2>Run the workbench on your machine</h2>'
         '<p>GitHub Pages hosts these guides and articles, not the Python server or model execution. '
         'It does not upload data or run experiments.</p>'
         '<p><a href="/docs/getting-started.md">Follow the installation guide</a>, then run:</p>'
@@ -97,6 +99,7 @@ def build_site(output, base_path="/quibble"):
         '</section></main></body></html>')
     write_page("/workbench", workbench)
     shutil.copyfile(ASSETS / "style.css", output / "style.css")
+    shutil.copyfile(ASSETS / "theme.js", output / "theme.js")
     (output / ".nojekyll").touch()
     return output
 

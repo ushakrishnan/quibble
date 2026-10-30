@@ -14,8 +14,34 @@ def load_pool(out, dataset, backend, ms):
         ss, pred = r["split_seed"], Path(f"{p.with_suffix('')}.pred.npy")
         idx, yy = d / f"idx_test_ss{ss}.npy", d / f"y_test_ss{ss}.npy"
         if "error" not in r and "refused" not in r and pred.exists() and idx.exists() and yy.exists():
-            splits[ss] = {"idx": np.load(idx), "y": np.load(yy), "P": np.load(pred)}
+            P = np.load(pred)
+            classes = r.get("prediction_classes")
+            if classes is not None and (P.ndim != 2 or classes != list(range(P.shape[1]))):
+                raise ValueError(f"{p.name}: prediction columns do not match recorded class order; "
+                                 "regenerate this result.")
+            splits[ss] = {"idx": np.load(idx), "y": np.load(yy), "P": P}
     return splits, runs
+
+
+def coverage_status(required, completed, runs):
+    """Describe missing required splits without hiding errors or incomplete artifacts."""
+    required = set(required)
+    missing = sorted(required - set(completed))
+    records = {r["split_seed"]: r for r in runs}
+    reasons = {}
+    for ss in missing:
+        record = records.get(ss)
+        if record is None:
+            reason = "missing run record"
+        elif "error" in record:
+            reason = "error: " + record["error"]
+        elif "refused" in record:
+            reason = "refused: " + record["refused"]
+        else:
+            reason = "incomplete prediction or shared test artifacts"
+        reasons[str(ss)] = reason
+    return {"required": sorted(required), "completed": sorted(required & set(completed)),
+            "missing": missing, "reasons": reasons}
 
 
 def seeds_available(out, dataset, backend):

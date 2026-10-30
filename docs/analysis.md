@@ -14,7 +14,7 @@ reported as missing/failed, not treated as competitors. The model seed defaults 
 ## Output files
 | File | Contents |
 |---|---|
-| `summary.csv` | One row per backend: primary metric, `ci_lo`/`ci_hi` (test-set noise), `cv_lo`/`cv_hi` (also counts retraining variability; 5+ splits), `split_std`, `n_seeds`, `seed_std`, `reseed_disagreement`, plus secondary metrics |
+| `summary.csv` | One row per backend: primary metric, `ci_lo`/`ci_hi` (test-set noise), `cv_lo`/`cv_hi` (approximate corrected split interval; 5+ splits), `split_std`, `n_seeds`, `seed_std`, `reseed_disagreement`, plus secondary metrics |
 | `calibration.csv` | Classification only: reliability table (10 bins) per backend |
 | `slices.csv` | Primary metric per slice and backend, with the spread between backends |
 | `disagreements_<a>_vs_<b>.csv` | Every disputed prediction pair, with row traits and the row's features |
@@ -41,9 +41,9 @@ Primary metric: `accuracy` for classification, `rmse` for regression (override w
   one weight. The interval is the 2.5th to 97.5th percentile of `QUIBBLE_BOOT` resamples
   (default 500). It captures **test-set sampling noise only**.
 - `cv_lo`, `cv_hi`: a Nadeau-Bengio corrected resampled interval over the per-split values. It
-  inflates the variance by `1/J + n_test/n_train` because CV training sets overlap, so it also
-  counts **retraining variability**. It needs 5 or more splits; otherwise it is `NaN`. Use
-  whichever is wider for decisions.
+  inflates the variance by `1/J + n_test/n_train` to approximate overlapping training sets and
+  retraining variation. It needs 5 or more splits; otherwise it is `NaN`. Swap uses the outer
+  bounds of this interval and the bootstrap. This does not establish calibrated verdict error rates.
 - The resampling seed is fixed, so results are reproducible and *paired*: two backends are compared
   on identical resamples.
 - Resamples with an undefined metric (for example an AUC where a resample has one class) are dropped
@@ -57,6 +57,8 @@ Primary metric: `accuracy` for classification, `rmse` for regression (override w
 With two or more model seeds saved for a backend, the summary adds `seed_std` (spread of the primary
 metric across seeds) and `reseed_disagreement` (how often two seeds of the same backend disagree).
 The latter is the noise floor for any candidate-versus-incumbent disagreement, and swap subtracts it.
+Raw disagreement remains in the check note. The adjustment does not propagate noise-estimate
+uncertainty and should not conceal concentrated harm in a small group.
 The main analysis still uses one seed (`--model-seed`, default the smallest found). Backends that do
 not control their seed (AutoGluon) are recorded with `seed_controlled: false`.
 
@@ -77,7 +79,8 @@ A slice is reported only if it has at least `--min-slice-n` **distinct rows** (d
 predicted in several CV repeats counts once). `n` in `slices.csv` is that row count. `spread` is the
 best minus the worst backend on that slice. Slices are **exploratory**: they are chosen using the
 target and ranked by spread between backends, so a large spread in a small slice is often noise.
-`slices.csv` has no intervals. The swap check's worst-slice interval is the rigorous version.
+`slices.csv` has no intervals. Swap bootstraps the maximum over the fixed selected masks, without
+repeating target-driven discovery. Family-wise and selection-adjusted coverage remain unverified.
 
 ## Disagreement
 For every pair of backends:

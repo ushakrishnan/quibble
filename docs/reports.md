@@ -72,16 +72,24 @@ not from general claims about a model family.
   prediction quality improved; it does not mean model execution failed.
 
 Quality and cost tables use the same selected model seed and common successful splits.
-Swap latency/memory checks separately average usable runs for each backend; with incomplete
+Swap latency/memory checks separately take medians of usable runs for each backend; with incomplete
 coverage their contributing splits can differ from the quality pool.
 Failure coverage remains visible in the interpretation and failure matrix. Without an evaluated
 swap verdict, shortlists do not approve a replacement.
 
 Recommendations apply only to the measured dataset and hardware. Marginal confidence-interval
 overlap alone does not establish equivalence or decide the paired difference; use paired swap
-checks. Bootstrap intervals capture test-row sampling; the corrected split interval, available with
-5 or more splits, also counts retraining variability. Validate against
+checks. Bootstrap intervals capture test-row or group sampling; corrected split intervals,
+available with 5 or more splits, approximate retraining variation under covariance assumptions.
+The combined verdict is not calibrated for false-PASS or false-FAIL rates. Validate against
 representative application data, deployment budgets, and meaningful swap thresholds before use.
+
+Each dataset and swap section names its split design and displays informational data flags.
+Swap tables preserve check notes, including unavailable intervals and missing retraining
+variation. Policy tables identify explicit settings versus inherited packaged placeholders.
+These qualifications survive report display and archival, including otherwise passing verdicts.
+Detected saved-setting mismatches are listed separately: reused evidence is not newly
+evaluated under the requested configuration.
 
 ## Regenerating
 The report reuses saved predictions and records, so adding a `--swap` or changing thresholds
@@ -91,6 +99,7 @@ Pass the same `--thresholds` file when regenerating to preserve your policy; it 
 auto-discovered. Without it, reports use the [packaged defaults](../quibble/swap_thresholds.json).
 `--require-thresholds` rejects a missing or empty policy before writing a report.
 Browser full runs save an effective policy beside their job record for reuse.
+Custom runs also retain the original overrides so inherited defaults remain identifiable.
 Demo and report share the same results root, defaulting to `results`. Every report generation
 saves a dated snapshot under `<out>/runs/YYYY-MM-DD/<snapshot-id>/` containing the report,
 figures, and generated dataset evidence (records, prediction/target/index arrays, and analysis).

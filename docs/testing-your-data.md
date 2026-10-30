@@ -124,9 +124,10 @@ Additional preparation rules:
 - CSV date-looking strings are treated as categories unless you engineer numeric features
   or exclude them. Parquet datetime columns need exclusion or an explicit categorical
   declaration. A categorical timestamp does not make a random split temporally valid.
-- This version has no group/time split, automatic leakage detection, deduplication,
-  train/test-file pairing, or automatic schema repair. Repeated observations from one
-  person/account or future-dependent features can invalidate random-split results.
+- Group/time splits are available through the manifest below. Leakage flags are heuristics,
+  not comprehensive detection. No automatic deduplication, train/test-file pairing, or schema
+  repair is implemented. Repeated observations or future-dependent features can invalidate
+  random-split results.
 
 The file is loaded into memory, not streamed. Size RAM/VRAM expectations accordingly.
 
@@ -226,6 +227,15 @@ With both columns declared, `split` defaults to `temporal`; the group column sti
 bootstrap. The split scheme is part of the dataset fingerprint, so changing it requires a new
 `--out`. Before training, quibble also prints [data flags](analysis.md#data-flags) for suspicious
 columns.
+
+For classification, every dataset class must occur in each training partition. A group or
+temporal split that omits a class is explicitly refused before any backend fits, rather than
+mislabeling probability columns. This includes training classes 1 and 2 when the complete
+encoded class set is 0, 1, and 2. Choose a representative training window or collect more
+training data; do not move future observations into training to make the check pass.
+Legacy group/time classification records without matching class-order metadata are rejected
+when reused or analyzed. Regenerate them with a new output directory. New successful
+classification records store `prediction_classes` in encoded probability-column order.
 
 ## 5. Discover and validate before training
 

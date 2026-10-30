@@ -57,7 +57,8 @@ Swap limits are separate from environment settings. The packaged
 Export with `quibble swap --export-thresholds limits.json`, review and edit the copy, then pass
 `--thresholds limits.json` to `swap`, `report`, or a full `benchmark`. Missing keys inherit
 defaults; files are never auto-discovered. `--require-thresholds` requires a non-empty explicit
-policy. In the workbench, full-run policy controls support editing, import, download, and
+policy, including partial overrides. Result provenance lists every inherited default; this flag
+does not certify those defaults were reviewed. In the workbench, full-run policy controls support editing, import, download, and
 per-experiment persistence. See [Swap checks](swap.md#changing-the-limits) for meanings and validation.
 
 ## Scenario-planning providers

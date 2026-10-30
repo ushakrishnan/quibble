@@ -203,7 +203,7 @@ def analyse(dataset, out=None, model_seed=None, metric=None, min_slice_n=MIN_SLI
     summ = pd.DataFrame(rows)
     summ.to_csv(adir / "summary.csv", index=False)
     say("\n== quality (ci = 95% bootstrap CI over data rows or groups, test-set noise only; "
-        "cv = wider interval that also counts retraining variability, needs 5+ splits; "
+        "cv = approximate corrected split interval, needs 5+ splits; "
         "split_std = spread across splits) ==")
     say(summ.round(4).to_string(index=False))
     if clf:

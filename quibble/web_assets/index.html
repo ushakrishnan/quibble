@@ -5,13 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="quibble-token" content="__CSRF_TOKEN__">
   <title>Quibble | Prediction experiments</title>
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#workbench-content">Skip to workbench</a>
 __PRODUCT_HEADER__
-<main>
-  <p>Choose existing data or describe a fictional scenario. Review the assumptions and sample data. Compare prediction methods on the same evaluation rows.</p>
+<main id="workbench-content" tabindex="-1">
+  <div class="workbench-intro">
+    <div><p class="eyebrow">Prediction experiments</p><h2>Compare models. Understand the trade-offs.</h2></div>
+    <p>Choose data, review the assumptions, and compare prediction methods on the same evaluation rows.</p>
+  </div>
   <div class="notice">Synthetic experiments test the chosen assumptions, not real business performance. No generated code is executed.</div>
   <div id="status" role="status" aria-live="polite">Loading workbench...</div>
   <p class="navigation-label">Start an experiment or return to saved evidence</p>

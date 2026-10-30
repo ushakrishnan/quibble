@@ -38,7 +38,7 @@ packages = ["quibble", "quibble.docs"]
 quibble = ["swap_thresholds.json", "web_assets/*.html", "web_assets/*.js", "web_assets/*.css",
            "sample_data/*/*.csv", "sample_data/*/*.json"]
 "quibble.docs" = ["*.md", "blog/*.md", "assets/blog/*.svg", "assets/blog/*.png",
-                 "assets/blog/*.csv", "assets/blog/*.json"]
+                 "assets/blog/*.csv", "assets/blog/*.json", "assets/screenshots/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -32,6 +32,8 @@ def test_static_site_has_no_broken_internal_links(tmp_path, base_path):
         assert "__PRODUCT_HEADER__" not in text and "__QUIBBLE_VERSION__" not in text
         assert 'href="/api/' not in text and 'src="/api/' not in text
         assert 'src="/app.js"' not in text and "landing.js" not in text
+        assert f'src="{base_path}/theme.js"' in text
+        assert 'aria-label="Color theme"' in text
         parser = Links()
         parser.feed(text)
         pages[path] = parser
@@ -50,6 +52,11 @@ def test_static_site_has_no_broken_internal_links(tmp_path, base_path):
             if target.fragment and destination in pages:
                 assert unquote(target.fragment) in pages[destination].anchors, (path, value)
     assert (output / ".nojekyll").is_file()
+    assert (output / "theme.js").is_file()
+    for name in ("workbench-choose-data.png", "workbench-configure-run.png", "workbench-results.png"):
+        assert (output / "docs" / "assets" / "screenshots" / name).is_file()
+        guide = (output / "docs" / "experiment-workbench.html").read_text(encoding="utf-8")
+        assert f'src="{base_path}/docs/assets/screenshots/{name}"' in guide
     assert (output / "docs" / "assets" / "blog" / "evidence-stages.svg").is_file()
     article = output / "docs" / "blog" / "02-making-prediction-comparisons-worth-trusting.html"
     text = article.read_text(encoding="utf-8")

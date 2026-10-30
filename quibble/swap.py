@@ -6,10 +6,10 @@ Each check is PASS (confidently within the limit), FAIL (confidently beyond it) 
 INCONCLUSIVE (the 95% interval straddles the limit, or no interval could be computed: collect
 more data). Exit code: 0 = PASS, 1 = FAIL, 2 = INCONCLUSIVE.
 Intervals combine two sources and use the wider: a bootstrap over rows (or groups) for test-set
-noise, and a Nadeau-Bengio corrected interval over splits that also counts retraining
-variability (needs 5+ splits; with fewer, only test-set noise is counted and the note says so).
-Quality drop is absolute (accuracy etc.) or relative (rmse/mae). The worst-slice interval covers
-the MAXIMUM over all slices, so it is valid for "the worst slice", whichever it turns out to be.
+noise, and an approximate Nadeau-Bengio corrected interval over splits (needs 5+ splits).
+Their union is not a calibrated end-to-end decision rule.
+Quality drop is absolute (accuracy etc.) or relative (rmse/mae). The worst-slice bootstrap
+recomputes the maximum over fixed, target-selected slices; selection coverage is not established.
 Default limits come from the packaged swap_thresholds.json. Review them for your application;
 use --thresholds for overrides and --require-thresholds in CI to require an explicit policy.
 """
@@ -27,10 +27,10 @@ from .datasets import load, validate_sources
 from .metrics import corrected_interval, degradation, score, widen
 from .pool import align, load_pool
 from .slices import row_traits, slice_masks, unique_rows
-from .thresholds import (DEFAULT_SOURCE, export_thresholds, load_thresholds,
+from .thresholds import (describe_policy, export_thresholds, load_thresholds, policy_provenance,
                          resolve_thresholds, validate_primary)
 
-MEMORY_FLOOR_MB = 50.0  # memory increases below this are interpreter noise, not model footprint
+MEMORY_FLOOR_MB = 50.0
 
 
 def tri(pt, lo, hi, thr):
@@ -50,7 +50,7 @@ class SwapError(Exception):
 
 
 def interval(boot, fn, per, n_train, n_test, clip=None):
-    """(point, lo, hi, notes): bootstrap interval widened by the retraining-variability interval.
+    """(point, lo, hi, notes): bootstrap widened by an approximate corrected split interval.
     ``clip=(0, 1)`` keeps the bounds of a rate inside its possible range."""
     b = boot.ci(fn)
     notes = []
@@ -59,6 +59,8 @@ def interval(boot, fn, per, n_train, n_test, clip=None):
     cv = corrected_interval(per, n_train, n_test) if per is not None else (np.nan,) * 3
     if np.isnan(cv[1]):
         notes.append("retraining variability not counted (needs 5+ splits)")
+    else:
+        notes.append("bounds include approximate corrected split interval (5+ usable splits)")
     pt, lo, hi = widen(b, cv)
     if clip is not None:
         lo, hi = max(lo, clip[0]), min(hi, clip[1])  # NaN stays NaN: max/min with nan return the number, so guard
@@ -131,8 +133,10 @@ def evaluate(dataset, incumbent, candidate, model_seed=0, out=None, thresholds=N
             label = "disagreement rate"
             notes.append("no reseed baseline: run 2+ model seeds to subtract the incumbent's own noise")
         else:
+            notes.append(f"raw disagreement: {fmt(pt, lo, hi, pct=True)}")
             label, pt, lo, hi = "disagreement rate (above reseed noise)", pt - noise, lo - noise, hi - noise
-            notes.append(f"incumbent disagrees with itself across seeds by {noise:.2%}")
+            notes.append(f"incumbent disagrees with itself across seeds by {noise:.2%}; "
+                         "noise-estimate uncertainty is not propagated")
         add(label, fmt(pt, lo, hi, pct=True), f"<= {thr['max_disagreement']:.0%}",
             tri(pt, lo, hi, thr["max_disagreement"]), "; ".join(notes))
         if clf:
@@ -164,11 +168,14 @@ def evaluate(dataset, incumbent, candidate, model_seed=0, out=None, thresholds=N
                 return max(vals) if vals else np.nan
 
             points = [deg(None, sel) for _, sel in slices]
-            name, sel = slices[int(np.nanargmax(points))]
+            name, sel = slices[int(np.nanargmax(points))] if np.isfinite(points).any() else slices[0]
             pt, lo, hi = boot.ci(worst)
             add(f"worst slice: {name} (n={unique_rows(sel, pool['idx'])} rows/{len(slices)} slices)",
                 fmt(pt, lo, hi), f"<= {thr['max_slice_drop']}", tri(pt, lo, hi, thr["max_slice_drop"]),
-                "interval covers the maximum over all slices; test-set noise only")
+                "bootstrap maximum over all slices with fixed, target-selected masks; "
+                "test-set noise only; selection coverage is not calibrated"
+                + (f"; {boot.dropped} unusable bootstrap resamples" if boot.dropped else "")
+                + ("; no interval available" if not np.isfinite(lo) else ""))
     for key, lim, label in (("single_row_p50_ms", "max_latency_ratio", "latency ratio (single-row p50)"),):
         ra, rb = center_of(ri, key), center_of(rc, key)
         if np.isnan(ra) or np.isnan(rb) or ra == 0:
@@ -178,19 +185,21 @@ def evaluate(dataset, incumbent, candidate, model_seed=0, out=None, thresholds=N
     ia, ib = center_of(ri, "peak_rss_increase_mb"), center_of(rc, "peak_rss_increase_mb")
     if not (np.isnan(ia) or np.isnan(ib)):
         ra, rb = max(ia, MEMORY_FLOOR_MB), max(ib, MEMORY_FLOOR_MB)
-        add("memory ratio (increase over process baseline)", f"{rb / ra:.2f}x ({ia:.0f} -> {ib:.0f} MB)",
+        add("memory ratio (baseline-adjusted process peak)", f"{rb / ra:.2f}x ({ia:.0f} -> {ib:.0f} MB)",
             f"<= {thr['max_memory_ratio']}x", "PASS" if rb / ra <= thr["max_memory_ratio"] else "FAIL",
-            f"increases under {MEMORY_FLOOR_MB:.0f} MB are treated as {MEMORY_FLOOR_MB:.0f} MB")
+            f"increases under {MEMORY_FLOOR_MB:.0f} MB are treated as {MEMORY_FLOOR_MB:.0f} MB; "
+            "includes imports, inference and process high-water marks; not model-only memory; use --jobs 1")
     else:
         ra, rb = center_of(ri, "peak_rss_mb"), center_of(rc, "peak_rss_mb")
         if not (np.isnan(ra) or np.isnan(rb) or ra == 0):
             add("memory ratio (peak RSS)", f"{rb / ra:.2f}x ({ra:.2f} -> {rb:.2f})",
                 f"<= {thr['max_memory_ratio']}x", "PASS" if rb / ra <= thr["max_memory_ratio"] else "FAIL",
-                "includes interpreter and imports; rerun with this version for the model-only increase")
+                "includes interpreter and imports; baseline-adjusted estimate unavailable; use --jobs 1")
     verdicts = [c["verdict"] for c in checks]
     overall = "FAIL" if "FAIL" in verdicts else "INCONCLUSIVE" if "INCONCLUSIVE" in verdicts else "PASS"
     return {"overall": overall, "checks": checks, "task": task, "thresholds": thr,
-            "thresholds_default": using_defaults, "flags": flags, "split": split_info(X),
+            "thresholds_default": using_defaults, "threshold_provenance": policy_provenance(thresholds),
+            "flags": flags, "split": split_info(X),
             "settings": "default model settings (no tuning)",
             "splits": len(pool["splits"]) if pool else 0}
 
@@ -203,7 +212,7 @@ def main():
     ap.add_argument("--model-seed", type=int, default=0)
     ap.add_argument("--thresholds", help="JSON file overriding defaults")
     ap.add_argument("--require-thresholds", action="store_true",
-                    help="require a non-empty, explicitly supplied threshold policy")
+                    help="require a non-empty policy; partial overrides still inherit listed defaults")
     ap.add_argument("--export-thresholds", type=Path, metavar="PATH",
                     help="write the packaged defaults to a new JSON file and exit")
     ap.add_argument("--out")
@@ -226,10 +235,7 @@ def main():
         sys.exit(str(e))
     print(f"SWAP REPORT: {a.incumbent} -> {a.candidate} on {a.dataset} ({r['task']}), "
           f"{r['splits']} splits, model seed {a.model_seed}; {r['settings']}")
-    if r["thresholds_default"]:
-        print(f"THRESHOLDS: packaged defaults ({DEFAULT_SOURCE}); review for your application")
-    else:
-        print("THRESHOLDS: custom policy (omitted keys use packaged defaults)")
+    print("THRESHOLDS: " + describe_policy(r["threshold_provenance"]).lower())
     print(json.dumps(r["thresholds"], indent=2))
     print()
     for c in r["checks"]:
@@ -241,7 +247,8 @@ def main():
     adir = Path(a.out or analysis_settings()["out_dir"]) / a.dataset / "analysis"
     adir.mkdir(parents=True, exist_ok=True)
     (adir / f"swap_{a.incumbent}_to_{a.candidate}.json").write_text(
-        json.dumps({k: r[k] for k in ("overall", "thresholds", "thresholds_default", "checks", "flags",
+        json.dumps({k: r[k] for k in ("overall", "thresholds", "thresholds_default", "threshold_provenance",
+                                      "checks", "flags",
                                       "split", "settings")}, indent=2, default=float))
     sys.exit({"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 2}[r["overall"]])
 

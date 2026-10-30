@@ -167,7 +167,7 @@ def smoke_positions(y, limit, seed, task):
 
 def run_one(backend, dataset, ms, cfg, force=False, retry_failed=False):
     from .backends import BACKENDS, Refused, device_exclusion
-    from .datasets import load, split, validate_sources
+    from .datasets import UnsupportedSplit, load, split, validate_sources
     from .env_info import collect
     s = stem(cfg.out_dir, dataset, backend, cfg.split_seed, ms)
     js = s.with_suffix(".json")
@@ -205,6 +205,9 @@ def run_one(backend, dataset, ms, cfg, force=False, retry_failed=False):
         if source:
             res["dataset_source"] = source
         validate_sources(cfg.out_dir, dataset, source)
+        res.update(task=task, split=X.attrs.get("quibble_split") or {"kind": "random"})
+        if task == "classification":
+            res["prediction_classes"] = sorted(y.unique().tolist())
         Xtr, Xte, ytr, yte, te_idx = split(X, y, cfg.split_seed, task, cfg.cv, cfg.cv_seed)
         res.update(n_train_available=len(Xtr), n_test_available=len(Xte))
         if cfg.run_type == "smoke":
@@ -243,7 +246,7 @@ def run_one(backend, dataset, ms, cfg, force=False, retry_failed=False):
         res["single_row_p50_ms"] = float(np.percentile(lat, 50))
         res["single_row_p95_ms"] = float(np.percentile(lat, 95))
         res["peak_rss_mb"] = peak_mb()
-        if rss_before is not None:  # the model's own footprint, without interpreter and imports
+        if rss_before is not None:
             res["rss_before_fit_mb"] = rss_before
             res["peak_rss_increase_mb"] = max(res["peak_rss_mb"] - rss_before, 0.0)
         if vram:  # only counts PyTorch allocations made in this process
@@ -269,7 +272,7 @@ def run_one(backend, dataset, ms, cfg, force=False, retry_failed=False):
         save_npy(f"{s}.pred.npy", P)
         save_npy(s.parent / f"y_test_ss{cfg.split_seed}.npy", yte.to_numpy())
         save_npy(s.parent / f"idx_test_ss{cfg.split_seed}.npy", te_idx)
-    except Refused as e:
+    except (Refused, UnsupportedSplit) as e:
         res["refused"] = str(e)
     except Exception as e:
         res["error"] = f"{type(e).__name__}: {e}"

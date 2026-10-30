@@ -288,6 +288,17 @@ for (const [id, text] of Object.entries(fieldHelp)) {
   }
 }
 
+function decorateReport(root) {
+  const verdicts = {PASS: "pass", FAIL: "fail", INCONCLUSIVE: "inconclusive"};
+  for (const node of root.querySelectorAll("strong, td")) {
+    const word = node.textContent.trim();
+    if (!Object.hasOwn(verdicts, word) || node.children.length) continue;
+    const badge = document.createElement("span");
+    badge.className = `verdict verdict-${verdicts[word]}`;
+    badge.textContent = word;
+    node.replaceChildren(badge);
+  }
+}
 function message(text, error = false) {
   $("status").textContent = text;
   $("status").classList.toggle("error", error);
@@ -654,20 +665,30 @@ async function refreshJob() {
   $("job-policy").hidden = !savedThresholds;
   $("job-thresholds").textContent = savedThresholds ? JSON.stringify(savedThresholds, null, 2) : "";
   $("job-policy-source").textContent = job.thresholds_default ?
-    "Packaged defaults at run time. Review for your application; PASS is not a production-safety guarantee." :
-    "Custom policy used for this experiment.";
+    "Packaged defaults at run time are placeholders. Review for your application; PASS is not a production-safety guarantee." :
+    job.threshold_provenance?.kind === "partial" ?
+      `Partial custom policy. Inherited packaged defaults: ${job.threshold_provenance.inherited.join(", ")}.` :
+      job.threshold_provenance?.kind === "explicit" ?
+        "Explicit custom policy used for every setting. PASS is not a production-safety guarantee." :
+        "Custom policy used; setting-origin metadata is unavailable for this older experiment.";
   const link = document.createElement("a");
   link.href = bookmarkJob(job.id); link.textContent = `Bookmark experiment ${job.id}`;
   $("job-return").replaceChildren(link, document.createTextNode(
     ` | ${job.backends?.join(", ") || "Selected methods"} | Saved files: ${job.directory}. Return using this link and the same Quibble server address. Reports persist after restart when using the same output directory; interrupted jobs do not resume.`));
   const exclusions = Object.entries(job.excluded_backends || {}).map(([name, reason]) =>
     `Excluded ${name}: ${reason}`).join(" ");
-  $("job-status").textContent = `${job.status.toUpperCase()} | ${job.dataset} | ${job.mode} | requested device: ${job.device}${job.device_resolved ? ` | resolved: ${job.device_resolved}` : ""}${job.exit_code === null ? "" : ` | exit ${job.exit_code}`}${job.error ? ` | ${job.error}` : ""}${exclusions ? ` | ${exclusions}` : ""}`;
+  const status = document.createElement("span"), metadata = document.createElement("span");
+  status.className = "job-state";
+  status.dataset.state = job.status;
+  status.textContent = job.status.toUpperCase();
+  metadata.textContent = `${job.dataset} | ${job.mode} | requested device: ${job.device}${job.device_resolved ? ` | resolved: ${job.device_resolved}` : ""}${job.exit_code === null ? "" : ` | exit ${job.exit_code}`}${job.error ? ` | ${job.error}` : ""}${exclusions ? ` | ${exclusions}` : ""}`;
+  $("job-status").replaceChildren(status, metadata);
   $("log").textContent = job.log;
   reportText = job.report || "";
   if (job.report_html) {
     // Only the server's HTML-disabled, sanitized Markdown renderer supplies this field.
     $("report").innerHTML = job.report_html;
+    decorateReport($("report"));
   } else if (reportText) {
     const notice = document.createElement("p"), source = document.createElement("pre");
     notice.textContent = "Your report is available. Restart the Quibble web server and reload this page to enable formatted Markdown. The original report is shown below and can be downloaded.";

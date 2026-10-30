@@ -57,7 +57,7 @@ ranking of model families.
 - Measured fit time, prediction latency, process memory, and PyTorch allocation peaks where applicable.
 - Recorded refusals, execution/resource failures, model participation, and mixed-device labels.
 - PASS / FAIL / INCONCLUSIVE swap checks under configurable limits, with intervals that also count
-  retraining variability (5+ splits), a family-wise worst-slice interval, and a seed-noise floor for
+  approximate retraining variation (5+ splits), an exploratory worst-slice bootstrap, and a seed-noise floor for
   disagreement.
 - Simple baselines (`dummy`, `linear`) and `quibble gate`, which asks whether a model beats a baseline.
 - Group and temporal splits for local data, group-clustered intervals, and cheap data flags for

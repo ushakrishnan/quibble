@@ -55,6 +55,23 @@ def validate_primary(thresholds, task):
         raise ValueError(f"primary metric {primary!r} is not valid for {task}.")
 
 
+def policy_provenance(overrides):
+    """Keep explicit settings distinct from values inherited from packaged placeholders."""
+    provided = sorted(overrides or {})
+    inherited = sorted(set(DEFAULTS) - set(provided))
+    kind = "defaults" if not provided else "partial" if inherited else "explicit"
+    return {"kind": kind, "provided": provided, "inherited": inherited, "source": DEFAULT_SOURCE}
+
+
+def describe_policy(provenance):
+    if provenance["kind"] == "defaults":
+        return f"Packaged defaults ({DEFAULT_SOURCE}); placeholders, not application-approved limits"
+    if provenance["kind"] == "partial":
+        return ("Custom policy (partial override); inherited packaged defaults: "
+                + ", ".join(provenance["inherited"]))
+    return "Custom policy (explicit values for all settings)"
+
+
 def load_thresholds(path):
     """Read and validate a custom policy, retaining partial overrides."""
     try:

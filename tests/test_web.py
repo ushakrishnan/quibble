@@ -85,6 +85,7 @@ def test_documentation_navigation_covers_guides_and_anchors():
     assert 'rel="prev" href="/docs/about.md"' in rendered
     assert 'rel="next" href="/docs/experiment-workbench.md"' in rendered
     assert 'href="#document-content">Skip to content' in rendered
+    assert rendered.index('class="skip-link"') < rendered.index("<header>")
     assert 'aria-label="Breadcrumb"' in rendered
     for route in ("/docs/README.md", "/docs/blog/02-making-prediction-comparisons-worth-trusting.md"):
         rendered = render_document(route, files[route], files).decode()
@@ -322,6 +323,11 @@ def test_http_origin_token_and_path_boundaries(app):
             rendered = request(path).read().decode()
             assert render_header(current) in rendered
             assert "__PRODUCT_HEADER__" not in rendered
+            assert rendered.index('src="/theme.js"') < rendered.index('href="/style.css"')
+            assert 'aria-label="Color theme"' in rendered
+        theme = request("/theme.js")
+        assert theme.headers["Content-Type"] == "text/javascript; charset=utf-8"
+        assert theme.read() == (ASSETS / "theme.js").read_bytes()
         assert 'href="/docs/blog/01-same-accuracy-different-mistakes.md"' in blog
         article = request("/docs/blog/01-same-accuracy-different-mistakes.md").read().decode()
         assert 'src="/docs/assets/blog/evidence-stages.svg"' in article
@@ -329,6 +335,8 @@ def test_http_origin_token_and_path_boundaries(app):
         assert 'id="why-not-upload-the-csv-to-chatgpt"' in article
         assert "title: Same Accuracy" not in article
         assert request("/docs/assets/blog/evidence-stages.png").headers["Content-Type"] == "image/png"
+        for name in ("workbench-choose-data.png", "workbench-configure-run.png", "workbench-results.png"):
+            assert request("/docs/assets/screenshots/" + name).headers["Content-Type"] == "image/png"
         evidence = json.loads(request("/docs/assets/blog/wine-smoke-evidence.json").read())
         assert evidence["dataset"]["name"] == "wine"
         for forbidden in ("/docs/../.env", "/docs/%2e%2e/.env",
@@ -421,7 +429,11 @@ def test_full_run_persists_effective_policy_and_passes_custom_file(app, monkeypa
     assert json.loads(policy_path.read_text()) == effective
     command = commands[0]
     if overrides:
-        assert Path(command[command.index("--thresholds") + 1]) == policy_path
+        overrides_path = policy_path.with_name("threshold_overrides.json")
+        assert Path(command[command.index("--thresholds") + 1]) == overrides_path
+        assert json.loads(overrides_path.read_text()) == overrides
+        assert saved["threshold_provenance"]["kind"] == "partial"
+        assert "max_disagreement" in saved["threshold_provenance"]["inherited"]
         assert "--require-thresholds" in command
     else:
         assert "--thresholds" not in command and "--require-thresholds" not in command
@@ -429,6 +441,7 @@ def test_full_run_persists_effective_policy_and_passes_custom_file(app, monkeypa
     restarted = Workbench()
     try:
         assert restarted.job(record["id"])["thresholds"] == effective
+        assert restarted.job(record["id"])["threshold_provenance"] == saved["threshold_provenance"]
     finally:
         restarted.close()
 

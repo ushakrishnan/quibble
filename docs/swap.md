@@ -29,17 +29,23 @@ quality, disagreement, calibration and slice checks: if fewer than 20 valid boot
 available the check is INCONCLUSIVE and the note says how many resamples were unusable.
 
 ## Where the intervals come from
-Each interval check combines two intervals and uses the **wider**:
+Quality, disagreement, and calibration checks combine two intervals and use their
+outer bounds. The worst-slice check uses the bootstrap only:
 
 1. A cluster bootstrap over rows, or over groups when the dataset declares `group_column`. It counts
    test-set noise.
-2. A Nadeau-Bengio corrected resampled interval over the per-split values. It also counts
-   retraining variability, because CV training sets overlap. It needs **5 or more splits**
+2. An approximate Nadeau-Bengio corrected resampled interval over per-split values, intended
+   to account for overlapping training sets and retraining variation. It needs **5 or more splits**
    (for example `--cv 5x1` or `--cv 3x2`). With fewer, a t interval would be so wide that it says
    almost nothing, so it is skipped and the note says "retraining variability not counted".
 
 Verdicts from one holdout split or three folds therefore reflect test-set noise only. Prefer
 `--cv 5x2` or more for decisions.
+
+The five-split cutoff is an implementation rule, not a precision guarantee. The combined
+decision rule has not been calibrated for false-PASS or false-FAIL rates. Temporal folds are
+not exchangeable, and row resampling does not model serial dependence. Interpret these
+intervals with those assumptions rather than as deployment certification.
 
 ## The checks
 | Check | What is measured | Default limit |
@@ -52,18 +58,21 @@ Verdicts from one holdout split or three folds therefore reflect test-set noise 
 | `calibration (ECE increase)` | classification: candidate ECE minus incumbent ECE (paired, with an interval) | 0.02 |
 | `worst slice` | largest quality drop over slices with enough rows; the interval covers the maximum over all slices | 0.05 |
 | `latency ratio (single-row p50)` | candidate / incumbent median of `single_row_p50_ms` | 2.0x |
-| `memory ratio (increase over process baseline)` | candidate / incumbent median of `peak_rss_increase_mb`, each floored at 50 MB | 1.5x |
+| `memory ratio (baseline-adjusted process peak)` | candidate / incumbent median of `peak_rss_increase_mb`, each floored at 50 MB | 1.5x |
 
 Notes:
 - Quality drop is positive when the candidate is worse. It is *absolute* for accuracy, AUC, R^2,
   log loss, Brier and ECE, and *relative* (a fraction) for RMSE and MAE. A candidate that is better
   shows a negative number.
-- The worst-slice interval is for "the worst slice, whichever it turns out to be": the maximum over
-  all slices is recomputed inside every bootstrap resample, so choosing the worst slice does not
-  bias the verdict. Slices are still chosen using the target, so treat them as exploratory.
+- The maximum over fixed slice masks is recomputed inside every bootstrap resample. Target-driven
+  slice discovery is not repeated, so family-wise or selection-adjusted coverage is not established.
+- Noise-adjusted disagreement subtracts an estimated incumbent reseed rate. The note preserves raw
+  disagreement and its interval; uncertainty in the noise estimate is not propagated.
 - Latency and memory are single-machine medians over usable runs, not necessarily only the common
-  quality-analysis splits. Use `--jobs 1` results. Memory compares the model's own increase over the
-  process before fitting, because the whole-process peak is mostly interpreter and library imports.
+  quality-analysis splits. Use `--jobs 1` results. Memory subtracts resident memory before fitting
+  from the lifetime process peak after inference. Imports, temporary allocations and earlier peaks
+  can still contribute; this is not model-only footprint. Estimates below 50 MB are floored for
+  the ratio, and the unfloored estimates remain visible beside it.
   Results from older versions without that field fall back to peak RSS and say so.
 - Fit time reported in run records excludes pretrained-weight loading (`load_s`), which is recorded
   separately; `fit_total_s` is the sum.
@@ -121,6 +130,8 @@ Without `--thresholds`, the command identifies the packaged default source and t
 swap JSON has `"thresholds_default": true`. With a non-empty custom policy it is `false`,
 even if the supplied values equal the defaults. The CLI prints the effective JSON, and
 reports show the origin and every effective setting.
+`threshold_provenance` distinguishes `defaults`, `partial`, and `explicit` policies and lists
+provided and inherited keys. The legacy boolean alone does not mean all defaults were replaced.
 
 For example, HistGB to LightGBM on the diabetes regression set can exceed the default 5% disagreement
 limit even though LightGBM has a lower RMSE: with a continuous target, two good models often differ
@@ -138,6 +149,8 @@ slice, and ECE degradation limits may be negative to require improvement.
 Pass `--require-thresholds` to `swap`, `report`, or full `benchmark` to require a non-empty
 explicit policy (recommended in CI). Missing or empty policies fail rather than falling back.
 This checks that a policy was supplied, not that every inherited default has been reviewed.
+Partial policies remain supported with this flag. CLI output and reports explicitly list their
+inherited defaults; only supplying every setting produces `kind: explicit`.
 Smoke benchmarks reject threshold options because they do not produce swap verdicts.
 
 ### Workbench

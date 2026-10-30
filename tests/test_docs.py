@@ -215,9 +215,17 @@ def test_docs_have_metadata_and_labeled_balanced_fences():
 
 def test_readme_illustrates_the_real_workflow():
     text = TEXT[ROOT / "README.md"]
+    screenshots = re.findall(r"!\[[^\]]+\]\((docs/assets/screenshots/[^)]+)\)", text)
+    assert screenshots == ["docs/assets/screenshots/workbench-results.png"]
+    for heading in ("## In plain English", "## Technical overview"):
+        assert heading in text
+        assert text.index(heading) < text.index("## See the workflow")
+    assert "docs/experiment-workbench.md#visual-walkthrough" in text
+    guide = TEXT[ROOT / "docs" / "experiment-workbench.md"]
     for name in ("workbench-choose-data.png", "workbench-configure-run.png", "workbench-results.png"):
-        assert f"(docs/assets/screenshots/{name})" in text
+        assert f"(assets/screenshots/{name})" in guide
     assert "real local full comparison" in text
+    assert "assets/screenshots/*.png" in (ROOT / "pyproject.toml").read_text()
 
 
 def test_env_template_has_no_duplicate_settings():

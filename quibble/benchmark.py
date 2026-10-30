@@ -33,7 +33,7 @@ def main() -> int:
     ap.add_argument("--out")
     ap.add_argument("--thresholds", type=Path, help="JSON overrides for swap limits")
     ap.add_argument("--require-thresholds", action="store_true",
-                    help="require an explicit non-empty swap policy")
+                    help="require a non-empty policy; partial overrides still inherit listed defaults")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--retry-failed", action="store_true",
                     help="rerun only cells whose saved result is an error")

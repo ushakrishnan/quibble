@@ -110,12 +110,13 @@ class Boot:
 
 
 def corrected_interval(values, n_train, n_test, alpha=0.05):
-    """Interval for the mean of a per-split quantity that includes retraining variability.
+    """Approximate corrected interval for the mean of a per-split quantity.
 
     Nadeau-Bengio corrected resampled t interval: the plain variance of the J split values is
     inflated by (1/J + n_test/n_train), because CV training sets overlap. Returns
-    (mean, lo, hi), or (mean, nan, nan) with fewer than 5 usable splits (the t quantile with 2 or 3 degrees of freedom
-    is so wide that the interval would say almost nothing)."""
+    (mean, lo, hi), or (mean, nan, nan) with fewer than 5 usable splits.
+    The cutoff is an implementation rule, not a precision guarantee. Exchangeability and
+    covariance assumptions need validation, especially for forward-chaining temporal folds."""
     from scipy.stats import t
     v = np.asarray([x for x in values if x is not None and np.isfinite(x)], dtype=float)
     if len(v) == 0:

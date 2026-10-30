@@ -151,7 +151,8 @@ findings on suitable real data before drawing application conclusions.
 Implemented since the last plan revision: configuration identity checks on result reuse (settings,
 model-specific settings and library versions), group and temporal splits and group-clustered
 intervals for local data, data flags, `dummy` and `linear` baselines, `quibble gate`, retraining-aware
-swap intervals, a family-wise worst-slice interval, seed-noise subtraction, and `--retry-failed`.
+swap intervals under covariance assumptions, an exploratory maximum-slice bootstrap,
+seed-noise subtraction, and `--retry-failed`.
 
 1. Verify what is claimed: TabPFN end to end, the OpenML registry, remote CI, and Docker. Publish a
    simulation study of the swap verdict's false-PASS and false-FAIL rates on data with known truth.

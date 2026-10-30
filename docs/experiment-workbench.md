@@ -13,6 +13,36 @@ Quibble's local generation code creates the rows and outcomes. Existing predicti
 methods then train and are evaluated on held-out outcomes. This does not benchmark
 ChatGPT as a predictor.
 
+## Visual walkthrough
+
+These screens use the current neutral light theme and the bundled fictional
+`grocery_sample` dataset. They show a real local comparison with HistGB and LightGBM
+on shared three-fold evaluation splits, not a mockup. No planning provider, private
+data, or optional model-weight download is needed for this example. Results depend
+on the dataset, configuration, and hardware, not real grocery operations.
+
+### Choose and review data
+
+Choose a ready-made dataset, inspect its sample and assumptions, and confirm review.
+The saved rows are reused unchanged.
+
+![Current workbench showing the reviewed fictional grocery dataset](assets/screenshots/workbench-choose-data.png)
+
+### Configure the comparison
+
+Choose methods, device policy, and smoke or full evaluation. Full runs require
+approval; smoke runs do not establish replacement evidence.
+
+![Current workbench configuration with HistGB, LightGBM, CPU execution, and three-fold evaluation](assets/screenshots/workbench-configure-run.png)
+
+### Read the evidence
+
+Compare quality and uncertainty, then inspect which predictions changed. The excerpt
+below shows paired disagreements. The complete report also includes checks, flags,
+failures, and limitations; the excerpt is not a replacement approval.
+
+![Current workbench report with a disagreement heatmap and paired prediction counts](assets/screenshots/workbench-results.png)
+
 ## Why generate a fresh dataset
 
 Familiar public benchmark tables may have appeared in a pretrained predictor's training
@@ -60,6 +90,20 @@ both articles, diagrams, and curated evidence work without public hosting.
 Docs and Blog work locally; GitHub links to the source repository.
 Version and license details appear in About's content, not the shared header.
 Read [About Quibble](about.md) and the [documentation home](README.md) locally meanwhile.
+
+The shared header's **Color theme** control offers System, Light, and Dark. System follows
+your device appearance; an explicit choice is saved in this browser and applies across
+Workbench, About, Docs, and Blog, including the static documentation site. If browser
+storage is unavailable, the selected appearance still works for the current page.
+No fonts, theme services, or other appearance assets are fetched from third parties.
+Light uses neutral white and gray surfaces; Dark uses charcoal rather than navy.
+Both have a flat header and one restrained blue accent for actions and selections.
+Green, red, and amber identify result and execution states, not navigation choices.
+
+The layout adapts to narrow screens and honors reduced-motion preferences. Keyboard users
+can skip to the main content and follow visible focus indicators. Report verdict badges
+make PASS, FAIL, and INCONCLUSIVE easier to scan without changing the report text, checks,
+or caveats. A completed experiment status means execution finished, not that a swap passed.
 
 The local Docs reader uses a documentation-site layout: grouped sidebar navigation,
 the current guide highlighted, breadcrumbs, an **On this page** section index, and

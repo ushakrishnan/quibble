@@ -3,22 +3,55 @@
 Review fixes applied to Quibble 0.0.1. Finding IDs (A, B, C, D, E, F) refer to the evaluation and
 change plan. Nothing here is released; the version number is unchanged.
 
+## Revision handoff follow-up
+
+- Gate coverage now includes baseline records and matching requested invocation cells.
+  Missing, refused, errored or incomplete required results prevent PASS; common-split quality
+  remains a separate diagnostic.
+- Group/time classification splits missing any training class are refused before fitting.
+  New records retain probability-column class order; legacy group/time classification evidence
+  without matching metadata must be regenerated in a new output directory.
+- Policy provenance identifies default, partial and fully explicit settings in CLI output,
+  saved swap JSON, reports and workbench jobs. Partial policies remain supported with
+  `--require-thresholds`; inherited defaults are listed instead of being called fully explicit.
+- Reports and their archives preserve interval notes, split design, data flags and saved-setting
+  mismatch warnings. Statistical and memory claims are qualified below and in the user guides.
+- Validation: 458 tests passed on Windows. Fresh offline demo, explicit-policy swap,
+  complete/incomplete gate exit checks, and grouped/temporal benchmark reports passed.
+  Live optional backends, remote CI and empirical verdict calibration remain unverified.
+
+## Workbench appearance
+
+- Shared color tokens, lighter cards, clearer form hierarchy and responsive navigation refresh
+  the workbench, public pages and documentation reader.
+- System, Light and Dark appearance choices persist in browser storage and work in exported
+  static documentation. Theme assets and fonts need no external service.
+- Neutral white/gray and charcoal palettes replace tinted surfaces and the gradient header;
+  one blue accent replaces teal and purple navigation colors. Semantic result colors stay distinct.
+- Keyboard skip links, visible focus, reduced-motion support and text-labeled verdict badges
+  improve navigation and report scanning without changing decisions or hiding caveats.
+- Browser smoke and full comparisons retain reports, history, threshold provenance and notes.
+
 ## Verdict statistics
-- **Retraining variability counted (A1, A2).** Swap and gate intervals are the wider of a cluster
-  bootstrap and a Nadeau-Bengio corrected interval over splits. It needs 5 or more splits; with fewer
-  the note says retraining variability is not counted. `summary.csv` gains `cv_lo` and `cv_hi`.
-- **Worst slice is family-wise (A3, F2).** The maximum over all slices is recomputed in every
-  bootstrap resample, so picking the worst slice no longer biases the interval.
+- **Approximate retraining interval (A1, A2).** Swap and gate use the outer bounds of a bootstrap
+  and a Nadeau-Bengio corrected split interval under covariance assumptions. It needs 5 or more
+  splits; with fewer the note says retraining variability is not counted. `summary.csv` gains
+  `cv_lo` and `cv_hi`. The combined verdict's false-PASS/false-FAIL rates are not calibrated.
+- **Worst-slice maximum (A3, F2).** The maximum over fixed selected slices is recomputed in every
+  bootstrap resample. Target-driven discovery is not repeated; family-wise coverage is unverified.
 - **Placeholders are labeled (A4).** Swap prints and saves whether default limits were used.
-  `--require-thresholds` refuses to produce a verdict from them. New tunable keys:
+  `--require-thresholds` requires a non-empty explicit policy; partial policies still inherit
+  listed defaults. New tunable keys:
   `confident_prob`, `regression_gap_std`, `near_margin`.
 - **No interval, no PASS (A5, F3).** A check without a usable interval is INCONCLUSIVE. Dropped
   bootstrap resamples are counted and reported.
 - **Disagreement noise floor (A6, F4).** With 2 or more model seeds, swap subtracts the incumbent's
   own seed-to-seed disagreement. `summary.csv` gains `n_seeds`, `seed_std`, `reseed_disagreement`.
+  Raw disagreement remains visible; uncertainty in the noise estimate is not propagated.
 - **ECE check has an interval (A7).** Rate intervals are kept inside 0 to 100%.
-- **Memory and latency (A8, F7, F11).** Memory compares the model's increase over the process
-  baseline (floored at 50 MB). Latency adds warm-up calls and compares medians.
+- **Memory and latency (A8, F7, F11).** Memory compares a baseline-adjusted process peak
+  (floored at 50 MB), not model-only footprint. Imports, inference and earlier high-water
+  marks can contribute. Latency adds warm-up calls and compares medians.
 
 ## Evaluation design
 - **Group and temporal splits (B1)** for local datasets: `group_column`, `time_column`, `split` in

@@ -8,63 +8,62 @@
 
 **Before you swap a tabular model, see exactly what changes.**
 
-Suppose you have historical invoices and know which were paid late. You want to predict
-late payment for new invoices, using only information available before the outcome.
-Which prediction method should you use, and what changes if you choose another? Quibble
-answers that with paired evidence, row-level disagreements, measured cost, and a
-PASS / FAIL / INCONCLUSIVE verdict you can put in CI.
+Quibble compares prediction methods on the same examples, showing which answers change,
+how strong the evidence is, and what each method costs to run.
 
-Quibble compares methods on the same held-out examples, checks their answers against known
-outcomes, and reports disagreements, prediction quality, and measured execution costs.
-It supports predicting categories (classification) and numbers (regression) from tables.
+[In plain English](#in-plain-english) | [Technical overview](#technical-overview) | [See the workflow](#see-the-workflow) | [Quick start](#quick-start) | [Your data](#test-your-own-data) | [Documentation](#documentation)
 
-Today, the methods include tree-based learning, AutoML, and pretrained tabular predictors.
-The latter are also called *tabular foundation models*: they bring learning from other
-tables to a new prediction task.
+## In plain English
 
-**Could ChatGPT do this too?** It can analyze CSVs, attempt predictions, or use tools to
-run statistical methods. The distinction is not the file format: it is whether the
-predictions are tested on held-out outcomes under defined rules. Quibble does not yet
-include a chat-LLM comparison; see the [scope and proposed evaluation](docs/rationale.md#could-chatgpt-predict-from-the-same-csv).
+Imagine two programs predicting whether a shop will run out of a product. Both get
+80 out of 100 answers right, but they might make mistakes on different products.
+The same score does not tell you whether switching programs is a good idea.
 
-[Quick start](#quick-start) | [Web workbench](docs/experiment-workbench.md) | [Your data](#test-your-own-data) | [Models and workflows](#recommended-comparison-workflows) | [Reports](#results-reuse-and-history) | [Documentation](#documentation)
+Quibble gives both programs the same test. It keeps the answers hidden while they
+make predictions, then checks which program was right when they disagreed. It also
+measures how long each takes and how much memory it uses.
+
+You get a side-by-side report before replacing one prediction tool with another.
+Sometimes the honest answer is that there is not enough evidence to decide.
+
+## Technical overview
+
+Quibble runs paired evaluations of tabular classifiers and regressors using shared
+holdout or cross-validation splits. Adapters cover tree-based learning, AutoML, and
+pretrained tabular predictors, subject to their dependencies and model access.
+Saved out-of-sample predictions support quality metrics, uncertainty intervals,
+row-level disagreements, calibration, exploratory slices, latency, memory, and
+explicit errors or refusals.
+
+Configurable replacement checks return PASS, FAIL, or INCONCLUSIVE with CLI exit
+codes for CI. Those verdicts depend on the data, split design, settings, and limits;
+they are not deployment certification. Use the local web workbench or CLI.
+Quibble is not an automatic tuner or model-serving platform.
+
+Chat models can also analyze tables or use tools to run predictors. Quibble does not
+yet include a chat-LLM predictor; see the [scope and proposed evaluation](docs/rationale.md#could-chatgpt-predict-from-the-same-csv).
 
 ## See the workflow
 
-Choose data, compare prediction methods, then inspect the evidence behind the scores.
-These screenshots use the bundled fictional `grocery_sample` dataset. No provider
-request or private data is involved.
+1. Choose existing data or design a synthetic dataset, then review its sample.
+2. Select prediction methods, device policy, and evaluation splits.
+3. Read the report, including uncertainty, disagreements, costs, and failures.
 
-### 1. Choose and review data
+This excerpt from a real local full comparison shows where HistGB and LightGBM
+disagree on the bundled fictional `grocery_sample` dataset using the current
+neutral theme. No provider request or private data is involved. It is an
+illustration, not evidence about real grocery operations.
 
-Use ready-made rows or design a synthetic dataset. Review its assumptions and sample
-before continuing.
+![Current workbench report showing a disagreement heatmap and paired prediction counts on the fictional grocery sample](docs/assets/screenshots/workbench-results.png)
 
-![Workbench showing the dataset choice and saved grocery sample](docs/assets/screenshots/workbench-choose-data.png)
-
-### 2. Configure a comparison
-
-Choose methods, CPU/CUDA policy, and evaluation splits. Here, HistGB and LightGBM use
-the same saved data with CPU execution and three-fold evaluation.
-
-![Workbench configuration showing methods, device policy, and evaluation splits](docs/assets/screenshots/workbench-configure-run.png)
-
-### 3. Read the result, not just the ranking
-
-Inspect quality, uncertainty, costs, disagreements, and failures in the generated report.
-This is a real local full comparison, not a mockup or a claim about real grocery operations.
-Results depend on the dataset, settings, and hardware.
-
-![Generated report from the grocery example comparison](docs/assets/screenshots/workbench-results.png)
-
-The [workbench guide](docs/experiment-workbench.md) explains the complete interactive
-flow; the [report guide](docs/reports.md) explains the evidence and its limits.
+See the [visual walkthrough](docs/experiment-workbench.md#visual-walkthrough) for all
+three screens, or the [report guide](docs/reports.md) for the evidence and its limits.
 
 ## Why quibble?
 
 | Look beyond the score | What you get |
 |---|---|
-| Quality and uncertainty | Intervals for test-set noise, a wider interval that also counts retraining variability (5+ splits), calibration, and weak slices |
+| Quality and uncertainty | Test-set bootstrap and approximate corrected split intervals (5+ splits), calibration, and exploratory slices |
 | Prediction-level differences | Disputed rows, who was right, and shared row traits |
 | Real execution costs | Fit time, prediction latency, memory, errors, and refusals |
 | Replacement decisions | PASS / FAIL / INCONCLUSIVE checks with configurable limits and CI exit codes; `quibble gate` asks whether a model beats a simple baseline at all |
@@ -499,17 +498,20 @@ device differences, and policy-limit failures.
   peak VRAM do not describe the same memory pool or every library's GPU allocations.
 - Bootstrap intervals cluster repeated predictions by original row (or by group when the
   dataset declares `group_column`). They measure test-row noise. With 5 or more splits, swap
-  also computes a Nadeau-Bengio corrected interval over splits that counts retraining
-  variability, and uses the wider of the two. Marginal interval overlap alone does not decide a
+  also computes an approximate Nadeau-Bengio corrected interval over splits and uses the outer
+  bounds of the two. The combined verdict's error rates are not calibrated.
+  Marginal interval overlap alone does not decide a
   paired difference or establish equivalence.
 - Swap checks PASS when the whole interval is within a limit, FAIL when wholly beyond, otherwise
   INCONCLUSIVE. A check with no usable interval is INCONCLUSIVE, never PASS. Latency and memory
-  compare medians and memory compares the model's increase over the process baseline.
-- The worst-slice interval covers the maximum over all slices. Swap defaults live in the
+  compare medians; memory is a baseline-adjusted process peak, not model-only footprint.
+- The worst-slice bootstrap recomputes the maximum over fixed, target-selected masks.
+  Family-wise coverage remains unverified. Swap defaults live in the
   packaged [swap_thresholds.json](quibble/swap_thresholds.json), shared by the CLI and UI.
   These are the limits Quibble uses, not universally safe acceptance criteria.
   Export a copy with `quibble swap --export-thresholds my_limits.json`, edit it, and pass
-  `--thresholds my_limits.json`. Use `--require-thresholds` in CI.
+  `--thresholds my_limits.json`. Use `--require-thresholds` in CI to require a non-empty policy;
+  partial overrides remain allowed and inherited defaults are listed explicitly.
   In the workbench, choose a full run and open **Swap acceptance policy (full runs)** to
   review defaults, edit or import custom JSON, and download the effective policy.
   Full experiments save their policy; reports show all effective limits.

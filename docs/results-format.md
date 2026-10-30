@@ -78,12 +78,13 @@ A real example (environment block omitted):
 | `preprocess_requested` / `preprocess_effective` | categorical rule asked for vs. applied |
 | `threads`, `jobs` | threading and sweep parallelism; `jobs > 1` means timings are indicative only |
 | `task`, `n_train`, `n_test` | task type and split sizes |
+| `prediction_classes`, `split` | new classification records: encoded probability-column order; new records: declared evaluation scheme |
 | `fit_s` | wall-clock seconds spent fitting, excluding pretrained-weight loading |
 | `load_s`, `fit_total_s` | seconds spent building the model (loading pretrained weights) and the total of load plus fit |
 | `predict_ms_per_row_batch` | milliseconds per row when predicting the whole test set |
 | `single_row_p50_ms`, `single_row_p95_ms` | latency percentiles over `QUIBBLE_SINGLE_N` single-row predictions |
 | `peak_rss_mb` | process peak resident memory in decimal MB (high-water mark for that process, including interpreter and imports) |
-| `rss_before_fit_mb`, `peak_rss_increase_mb` | resident memory just before fitting, and the peak minus that (the model's own footprint); absent when the system cannot report current memory |
+| `rss_before_fit_mb`, `peak_rss_increase_mb` | resident memory before fitting and lifetime process peak minus that baseline; an estimate including imports, inference and earlier peaks, not model-only footprint; absent when current memory is unavailable |
 | `single_n`, `seed_controlled`, `backend_verification` | latency sample size used; whether the model seed makes training reproducible (`false` for AutoGluon); the adapter's verification label at run time |
 | `tabpfn_max_rows` | TabPFN only: the configured row limit, so a changed limit is detected on reuse |
 | `peak_torch_vram_mb` | CUDA-attempted backend only: peak PyTorch allocation in that process (not non-Torch libraries) |
@@ -130,6 +131,9 @@ rows as in `summary.csv`), optional local `dataset_source`, and `pairs`, keyed `
 `thresholds_default` (true for implicit packaged defaults, false for a non-empty supplied policy),
 and `checks`, a list of
 `{check, observed, limit, verdict, note}`.
+`threshold_provenance` records `kind` (`defaults`, `partial`, or `explicit`), the `provided`
+and `inherited` setting names, and the packaged source. `flags` and `split` accompany the
+verdict. Reports preserve these qualifications rather than using the legacy boolean alone.
 
 ## Sizes and version control
 JSON files are small. `.pred.npy` files scale with test rows x classes x splits x backends x seeds.

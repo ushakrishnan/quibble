@@ -16,6 +16,12 @@ from sklearn.model_selection import RepeatedKFold, RepeatedStratifiedKFold, trai
 from sklearn.preprocessing import LabelEncoder
 
 C, R = "classification", "regression"
+
+
+class UnsupportedSplit(ValueError):
+    """The evaluation split cannot support the shared classifier probability contract."""
+
+
 # name: (openml id, task, expected OpenML name)
 OPENML = {
     "credit-g": (31, C, "credit-g"), "diabetes": (37, C, "diabetes"),
@@ -169,6 +175,12 @@ def validate_sources(out, name, source):
             raise ValueError(f"Local dataset source differs from saved results for {name}. "
                              "Restore the original file/manifest or use a new --out; "
                              "--force does not permit mixing changed source data.")
+        if source and source.get("task") == C and split_kind(source) != "random":
+            expected = list(range(len(source["class_labels"]))) if source.get("class_labels") else None
+            classes = record.get("prediction_classes")
+            if classes is None or (expected is not None and classes != expected):
+                raise ValueError(f"{path.name}: saved group/temporal classification lacks matching "
+                                 "class-order validation; regenerate with a new --out.")
 
 
 def _local_fetch(name):
@@ -340,8 +352,15 @@ def _split_positions(X, y, split_id, task, cv, cv_seed, cfg):
             tr, te = order[:edges[split_id + 1]], order[edges[split_id + 1]:edges[split_id + 2]]
     if len(tr) == 0 or len(te) == 0:
         raise ValueError("split produced an empty train or test set; use fewer folds or more data")
-    if task == C and y.iloc[tr].nunique() < 2:
-        raise ValueError("the training part of this split contains fewer than 2 classes")
+    if task == C:
+        missing = sorted(set(y.unique().tolist()) - set(y.iloc[tr].unique().tolist()))
+        if missing:
+            raise UnsupportedSplit(f"{cfg['kind']} split training data is missing dataset classes "
+                                   f"{missing}; all classes must occur in training to preserve "
+                                   "probability-column order. Use another valid evaluation window "
+                                   "or provide more representative training data.")
+        if y.iloc[tr].nunique() < 2:
+            raise UnsupportedSplit("the training part of this split contains fewer than 2 classes")
     return np.sort(tr), np.sort(te)
 
 

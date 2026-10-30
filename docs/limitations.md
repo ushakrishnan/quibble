@@ -31,18 +31,23 @@ The following boundaries determine which conclusions the current evaluation supp
   requirements; local CUDA validation is limited to selected classification fits.
 
 ## Statistics
-- Bootstrap intervals reflect test-set noise only. The corrected split interval that also counts
-  retraining variability needs 5 or more splits; with fewer, swap says so and counts test-set noise only.
-- The corrected interval is a heuristic (Nadeau-Bengio). It is conservative with few splits and
-  assumes the splits are exchangeable, which temporal forward-chaining folds are not.
+- Bootstrap intervals reflect test-set noise only. Approximate corrected split intervals need
+  5 or more splits; with fewer, swap says retraining variability is not counted. The cutoff is an
+  implementation rule, not a precision guarantee.
+- The corrected interval uses Nadeau-Bengio covariance assumptions, including exchangeable
+  splits, which temporal forward-chaining folds are not. Row bootstrap does not model serial
+  dependence. The combined verdict is not calibrated for false-PASS or false-FAIL rates.
 - Slices cover only missingness, rare categories and three numeric features; no interaction slices.
   They are chosen using the target and ranked by spread, so they are exploratory. `slices.csv` has no
-  intervals. The swap worst-slice interval covers the maximum over slices but counts test-set noise only.
+  intervals. Swap bootstraps the maximum over fixed selected masks, counts test-set noise only,
+  and does not repeat discovery. Family-wise coverage has not been established.
 - Multiclass calibration is top-label only; there is no per-class reliability analysis. The swap ECE
   check has an interval, but ECE depends on its 10 equal-width bins.
 - Disagreement thresholds (regression gap, confidence, rare category, margin) are configurable
   defaults, not tuned. The reseed noise floor needs 2 or more model seeds; deterministic backends
   show zero seed noise even though retraining on different data would change their predictions.
+  Noise-adjusted disagreement retains the raw rate but does not propagate uncertainty in the
+  estimated noise floor.
 - The [packaged swap defaults](../quibble/swap_thresholds.json) need review against what a swap
   really costs you; they are not universally safe acceptance criteria. Verdicts
   use default model settings; quibble does not tune hyperparameters, so a swap verdict says nothing
@@ -53,6 +58,8 @@ The following boundaries determine which conclusions the current evaluation supp
 - Group and temporal splits exist for local datasets only, and only one time or group column.
   Nested hierarchies, gaps between train and test periods, and expanding versus sliding windows are
   not configurable.
+- Grouped or temporal classification splits missing any dataset class in training are explicitly
+  refused before backend fitting. Quibble does not guess probability columns for unseen classes.
 - Prediction agreement does not identify a predictor's internal algorithm, and a report's
   interpretation is not an explanation of its internal computation.
 - Familiar public datasets may have been encountered during pretraining. Quibble does
@@ -69,6 +76,9 @@ The following boundaries determine which conclusions the current evaluation supp
   calls and a median; it includes a small pandas copy per call that applies to every backend.
 - `peak_rss_mb` is a per-process high-water mark that includes the interpreter and imports.
   `peak_rss_increase_mb` subtracts the process size just before fitting, and is what swap compares.
+  It is a baseline-adjusted process peak, not model-only memory: imports, inference, temporary
+  allocations and earlier process peaks can contribute. Swap floors each estimate at 50 MB for
+  the ratio and displays the unfloored estimates.
   It needs `psutil` or Linux `/proc`; on other systems only the peak is recorded.
   `peak_torch_vram_mb` counts PyTorch allocations only (including PyTorch components used by
   AutoGluon, but not CatBoost or other non-Torch allocations).
@@ -83,6 +93,8 @@ The following boundaries determine which conclusions the current evaluation supp
   AutoGluon preset and time limit, TabPFN row limit), latency sample size, the dataset fingerprint
   and the installed versions of numpy, pandas and the backend's library. Settings it does not
   compare, such as thread count, can still differ.
+  Invocation records retain detected differences; reports warn when saved-setting mismatches
+  exist. Detection is not automatic invalidation or a new evaluation under the requested settings.
 - Error results count as finished. Rerun only the failed cells with `--retry-failed`; refusals are
   deterministic and are kept.
 - Local data/manifest fingerprints prevent changed inputs from being analyzed against old
