@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from quibble import planner as foundry
-from quibble.generate import recommendation
+from quibble_ml import planner as foundry
+from quibble_ml.generate import recommendation
 
 
 @pytest.fixture
@@ -174,20 +174,20 @@ def test_explicit_login_and_token_check(configured, monkeypatch, capsys):
     monkeypatch.setattr(foundry.subprocess, "run", lambda command, **kwargs: commands.append(command))
     monkeypatch.setattr(foundry, "credential_for", lambda s: SimpleNamespace(
         get_token=lambda scope: SimpleNamespace(token="never-print-this"), close=lambda: None))
-    monkeypatch.setattr("sys.argv", ["quibble auth", "--device-code"])
+    monkeypatch.setattr("sys.argv", ["quibble-ml auth", "--device-code"])
     assert foundry.main() == 0
     assert commands[0] == ["az", "login", "--output", "none", "--tenant", "test-tenant", "--use-device-code"]
     assert commands[1] == ["az", "account", "set", "--subscription", "test-subscription"]
     assert "never-print-this" not in capsys.readouterr().out
     commands.clear()
-    monkeypatch.setattr("sys.argv", ["quibble auth", "--check"])
+    monkeypatch.setattr("sys.argv", ["quibble-ml auth", "--check"])
     assert foundry.main() == 0 and not commands
 
 
 def test_default_identity_does_not_trigger_cli_login(configured, monkeypatch):
     monkeypatch.setenv("FOUNDRY_AUTH_MODE", "aad")
     monkeypatch.setenv("FOUNDRY_AAD_CREDENTIAL", "default")
-    monkeypatch.setattr("sys.argv", ["quibble auth"])
+    monkeypatch.setattr("sys.argv", ["quibble-ml auth"])
     def forbidden(*args, **kwargs):
         pytest.fail("Default identity must not invoke CLI login")
     monkeypatch.setattr(foundry.subprocess, "run", forbidden)
@@ -196,7 +196,7 @@ def test_default_identity_does_not_trigger_cli_login(configured, monkeypatch):
 
 def test_invalid_credential_initialization_is_explicit(configured, monkeypatch, capsys):
     monkeypatch.setenv("FOUNDRY_AUTH_MODE", "aad")
-    monkeypatch.setattr("sys.argv", ["quibble auth", "--check"])
+    monkeypatch.setattr("sys.argv", ["quibble-ml auth", "--check"])
     def bad_credential(settings):
         raise ValueError("private credential details")
     monkeypatch.setattr(foundry, "credential_for", bad_credential)

@@ -5,7 +5,7 @@ from urllib.parse import unquote, urlsplit
 
 import pytest
 
-from quibble.site import build_site
+from quibble_ml.site import build_site
 
 
 class Links(HTMLParser):
@@ -53,6 +53,10 @@ def test_static_site_has_no_broken_internal_links(tmp_path, base_path):
                 assert unquote(target.fragment) in pages[destination].anchors, (path, value)
     assert (output / ".nojekyll").is_file()
     assert (output / "theme.js").is_file()
+    capability = output / "docs" / "what-quibble-does.html"
+    assert capability.is_file()
+    assert "Is this already a native Kumo Relational comparison?" in capability.read_text(encoding="utf-8")
+    assert "What Quibble does" in (output / "docs" / "README.html").read_text(encoding="utf-8")
     for name in ("workbench-choose-data.png", "workbench-configure-run.png", "workbench-results.png"):
         assert (output / "docs" / "assets" / "screenshots" / name).is_file()
         guide = (output / "docs" / "experiment-workbench.html").read_text(encoding="utf-8")
@@ -60,8 +64,8 @@ def test_static_site_has_no_broken_internal_links(tmp_path, base_path):
     assert (output / "docs" / "assets" / "blog" / "evidence-stages.svg").is_file()
     article = output / "docs" / "blog" / "02-making-prediction-comparisons-worth-trusting.html"
     text = article.read_text(encoding="utf-8")
-    assert "https://github.com/ushakrishnan/quibble/blob/main/quibble/datasets.py" in text
-    assert "https://github.com/ushakrishnan/quibble/blob/main/quibble/swap_thresholds.json" in text
+    assert "https://github.com/ushakrishnan/quibble/blob/main/quibble_ml/datasets.py" in text
+    assert "https://github.com/ushakrishnan/quibble/blob/main/quibble_ml/swap_thresholds.json" in text
     assert 'aria-label="Blog series"' in text
     assert "GitHub Pages hosts these guides" in (output / "workbench" / "index.html").read_text()
     names = {path.name for path in output.rglob("*")}

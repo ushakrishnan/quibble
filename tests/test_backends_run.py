@@ -1,13 +1,37 @@
 import json
+import os
+import subprocess
 import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from quibble.backends import BACKENDS, Refused
-from quibble.config import Config
-from quibble.run import peak_mb, run_one, stem
+from quibble_ml.backends import BACKENDS, Refused
+from quibble_ml.config import Config
+from quibble_ml.run import peak_mb, run_one, stem
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows virtualenv descendant regression")
+def test_worker_timeout_kills_descendants_before_workspace_cleanup(tmp_path):
+    import psutil
+    from quibble_ml.run import _worker_process
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    marker = tmp_path / "child.pid"
+    child = (
+        f"import os,time; from pathlib import Path; os.chdir({str(workspace)!r}); "
+        f"Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)"
+    )
+    parent = (
+        f"import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',{child!r}]); "
+        "time.sleep(60)"
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        _worker_process([sys.executable, "-c", parent], timeout=4, env=os.environ.copy())
+    assert marker.exists(), "The owned descendant must actually have started."
+    assert not psutil.pid_exists(int(marker.read_text()))
+    workspace.rmdir()
 
 
 def test_peak_memory_is_positive_and_finite():
@@ -121,7 +145,7 @@ def test_backend_that_cannot_do_the_task_refuses(monkeypatch, tmp_path):
 def test_native_categoricals_run_and_handle_unseen_values():
     import numpy as np
     import pandas as pd
-    from quibble.backends import CatBoost, HistGB, LightGBM
+    from quibble_ml.backends import CatBoost, HistGB, LightGBM
     rng = np.random.default_rng(0)
     n = 400
     X = pd.DataFrame({"a": rng.normal(size=n), "c": pd.Series(rng.choice(["x", "y", "z", None], n), dtype="object")})
@@ -144,7 +168,7 @@ def test_refused_is_an_exception_type():
 
 
 def test_changed_settings_with_same_out_dir_warns_instead_of_silently_reusing(monkeypatch, tmp_path, capsys):
-    from quibble.run import sweep
+    from quibble_ml.run import sweep
     run_one("histgb", "wine", 0, cfg_for(monkeypatch, tmp_path), force=True)  # preprocess=ordinal
     cfg = cfg_for(monkeypatch, tmp_path, QUIBBLE_PREPROCESS="native")
     capsys.readouterr()

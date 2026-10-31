@@ -6,15 +6,15 @@ from importlib.resources import files
 
 import pytest
 
-from quibble.thresholds import (DEFAULTS, export_thresholds, load_thresholds,
+from quibble_ml.thresholds import (DEFAULTS, export_thresholds, load_thresholds,
                                 resolve_thresholds, validate_primary)
 
 
 def test_defaults_are_the_packaged_resource_and_do_not_depend_on_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    packaged = json.loads(files("quibble").joinpath("swap_thresholds.json").read_text(encoding="utf-8"))
+    packaged = json.loads(files("quibble_ml").joinpath("swap_thresholds.json").read_text(encoding="utf-8"))
     assert resolve_thresholds() == packaged == DEFAULTS
-    from quibble.analyze import BIG, HI, MIN_SLICE_ROWS, NEAR
+    from quibble_ml.analyze import BIG, HI, MIN_SLICE_ROWS, NEAR
     assert (HI, BIG, NEAR, MIN_SLICE_ROWS) == tuple(
         packaged[key] for key in ("confident_prob", "regression_gap_std", "near_margin", "min_slice_n"))
     merged = resolve_thresholds({"max_quality_drop": 0.02})
@@ -60,7 +60,7 @@ def test_loading_invalid_json_reports_the_policy_path(tmp_path, text):
 
 def test_export_cli_works_outside_repository_and_never_overwrites(tmp_path):
     path = tmp_path / "policy.json"
-    command = [sys.executable, "-m", "quibble", "swap", "--export-thresholds", str(path)]
+    command = [sys.executable, "-m", "quibble_ml", "swap", "--export-thresholds", str(path)]
     result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert load_thresholds(path) == DEFAULTS
@@ -74,7 +74,7 @@ def test_export_cli_works_outside_repository_and_never_overwrites(tmp_path):
 def test_swap_records_custom_policy_and_enforces_requirement(cv_results, tmp_path):
     path = tmp_path / "limits.json"
     path.write_text('{"max_quality_drop": 0.02}', encoding="utf-8")
-    command = [sys.executable, "-m", "quibble", "swap", "--incumbent", "histgb",
+    command = [sys.executable, "-m", "quibble_ml", "swap", "--incumbent", "histgb",
                "--candidate", "histgb", "--dataset", "breast_cancer", "--out", str(cv_results),
                "--thresholds", str(path), "--require-thresholds"]
     result = subprocess.run(command, capture_output=True, text=True, timeout=60)
@@ -91,7 +91,7 @@ def test_swap_records_custom_policy_and_enforces_requirement(cv_results, tmp_pat
 
 @pytest.mark.parametrize("custom", [None, {"max_quality_drop": 0.02}])
 def test_report_shows_effective_policy_and_origin(cv_results, custom):
-    from quibble.report import build
+    from quibble_ml.report import build
     text = build(cv_results, ["breast_cancer"], swaps=[("histgb", "histgb")],
                  thresholds=custom).read_text(encoding="utf-8")
     assert "Effective swap thresholds" in text
@@ -104,7 +104,7 @@ def test_report_shows_effective_policy_and_origin(cv_results, custom):
 
 
 def test_report_requirement_is_checked_before_writing(tmp_path):
-    from quibble.report import build
+    from quibble_ml.report import build
     with pytest.raises(ValueError, match="non-empty policy"):
         build(tmp_path, require_thresholds=True)
     assert not (tmp_path / "report").exists()

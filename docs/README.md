@@ -13,6 +13,7 @@ Start with [About Quibble](about.md) for its purpose and limits, then choose a g
 
 | Goal | Guide |
 |---|---|
+| Understand existing and new capabilities without an ML background | [What Quibble does](what-quibble-does.md) |
 | Read the project story and engineering lessons | [Predicting from Tables blog series](blog/README.md) |
 | Install from source and run the offline demo | [Getting started](getting-started.md) |
 | Choose data, design a variant, and run in the browser | [Experiment workbench](experiment-workbench.md) |

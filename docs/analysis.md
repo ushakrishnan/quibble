@@ -5,7 +5,12 @@ description: Paired prediction analysis, cluster-bootstrap uncertainty, calibrat
 
 ## Analysis
 
-`quibble analyze --dataset D` pools predictions across splits and writes results to
+Two methods can both get 80 answers right out of 100 while disagreeing on
+which answers are wrong. Analysis opens that scorecard: it checks changed
+answers, confidence, difficult groups, and how much uncertainty remains.
+It describes the saved test, not a guarantee about tomorrow's data.
+
+`quibble-ml analyze --dataset D` pools predictions across splits and writes results to
 `<out>/D/analysis/`. All backends are **aligned**: only splits completed by every backend are used
 (dropped splits are listed). Backends with no usable predictions are excluded and must be
 reported as missing/failed, not treated as competitors. The model seed defaults to the smallest found; choose with
@@ -16,13 +21,23 @@ reported as missing/failed, not treated as competitors. The model seed defaults 
 |---|---|
 | `summary.csv` | One row per backend: primary metric, `ci_lo`/`ci_hi` (test-set noise), `cv_lo`/`cv_hi` (approximate corrected split interval; 5+ splits), `split_std`, `n_seeds`, `seed_std`, `reseed_disagreement`, plus secondary metrics |
 | `calibration.csv` | Classification only: reliability table (10 bins) per backend |
+| `calibration_classwise_summary.csv` | One-vs-rest class ECE, class-column mapping and distinct positive/negative support |
+| `calibration_classwise.csv` | Every class and all ten bins, including empty bins, counts, weights and observed frequencies |
 | `slices.csv` | Primary metric per slice and backend, with the spread between backends |
 | `disagreements_<a>_vs_<b>.csv` | Every disputed prediction pair, with row traits and the row's features |
+| `interaction_rules.json`, `interaction_rules.csv` | Opt-in frozen exploratory rules and aggregate paired evaluation summaries |
+| `relational_slices.csv` | Relational-only descriptive paired quality/disagreement by history, recency, missing relations and cold start; explicit distinct-row/group support |
 | `analysis.json` | Machine-readable summary of all of the above, plus `data_flags` and the split scheme |
-| `swap_<a>_to_<b>.json` | Written by `quibble swap` |
+| `swap_<a>_to_<b>.json` | Written by `quibble-ml swap` |
 
 ## Metrics
 Primary metric: `accuracy` for classification, `rmse` for regression (override with `--metric`).
+
+Relational diagnostic boundaries are fixed and label-free. Empty slices retain
+null measurements; small slices and one-group slices have limited support.
+These summaries have no confidence bounds, causal interpretation, or additional
+swap gates. Correlated prediction examples are counted separately from their
+entity clusters. See [multi-table evaluation](testing-your-data.md).
 
 | Metric | Definition | Better |
 |---|---|---|
@@ -65,7 +80,34 @@ not control their seed (AutoGluon) are recorded with `seed_controlled: false`.
 ## Calibration
 `ece` is a single number; `calibration.csv` has the bins (`bin`, `n`, `mean_conf`, `accuracy`). A
 well-calibrated model has `accuracy` close to `mean_conf` in each bin. Multiclass calibration uses
-the top-label confidence only.
+the top-label confidence only. Its values and weighting are unchanged.
+
+### Per-class reliability
+
+The classwise exports ask a different question: when the model gives a particular
+class a certain probability, how often does that class actually occur?
+Each recorded probability column becomes a one-vs-rest diagnostic. Source labels
+are shown when recorded; legacy unrecorded labels remain unknown, with an explicit
+column index instead.
+
+Bins have width 0.1: lower boundaries are inclusive, upper boundaries exclusive,
+except the final bin includes probability 1. Every distinct source row has total
+weight one. Repeated predictions divide that weight equally without averaging
+their probabilities first. `count` is the number of prediction entries;
+`unique_rows` and `weight` make repetition visible. The same row can contribute
+fractional weight to several bins.
+
+Empty bins have null mean probability and frequency. Classes with no positive or
+no negative examples have null class ECE and an explicit support status. Fewer
+than twenty distinct positive or negative rows are flagged as rare. This flag is
+a descriptive warning, not a validated safety threshold. Class ECE otherwise sums
+weighted absolute bin gaps, independently from top-label ECE.
+
+These summaries have no confidence intervals. Existing grouped bootstrap behavior
+is unchanged; no independence or temporal-calibration guarantee is added.
+Classwise diagnostics do not change swap verdicts or apply post-hoc calibration.
+Reports show bounded tables and figures; the CSV and JSON exports retain every
+class and bin, including in archived reports.
 
 ## Slices
 Slices show whether an average hides a weak segment. Defined on the full dataset (diagnostic only):
@@ -123,3 +165,82 @@ Before reporting, quibble runs cheap checks and prints `DATA FLAG` lines, saved 
 
 These are heuristics: silence does not prove there is no leakage, and a flag is a prompt to
 investigate. See [Testing your own data](testing-your-data.md#group-and-temporal-splits).
+
+## Opt-in disagreement interaction rules
+
+The bounded explainer supplements, rather than replaces, trait and single-feature
+slices. Select an **ordered backend pair** and a **reviewed safe feature allowlist**:
+
+```bash
+quibble-ml analyze --dataset D --out results \
+  --interaction-pair histgb:lightgbm \
+  --interaction-features age,income,region \
+  --interaction-exclude customer_id,event_time,final_outcome \
+  --interaction-seed 17 --interaction-min-rows 20 --interaction-min-groups 2
+```
+
+Only allowlist features are read by the explainer. Targets, declared dropped/ID/time/group
+columns, reserved target/ID/prediction names, and explicitly excluded columns are rejected.
+This is not automatic leakage detection: review column roles and exclude arbitrary-named
+post-outcome fields yourself. Optional `X.attrs["quibble_feature_roles"]` can declare unsafe
+roles; only roles `feature` and `predictor` are eligible. Existing general analysis and
+disagreement CSV generation retain their own behavior.
+
+The implementation:
+
+* Aligns the named pair's common completed splits, independently of other backends.
+  Exports its recorded recipes; legacy recipes remain explicitly unknown (`null`).
+  Optional `--interaction-recipes FAMILY_SHA_A:FAMILY_SHA_B` asserts the ordered
+  `family_sha256` identities and rejects mismatches.
+* Consolidates repeat entries to the mean disagreement rate per original source row.
+  It never selects a favorable repeat or counts repeats as independent rows.
+* Uses a fixed-seed permutation to split distinct rows equally into discovery and
+  evaluation. Declared groups are kept wholly on one side. Support is checked in
+  distinct rows **and**, when present, distinct groups, not prediction entries.
+* Fits numeric medians and a depth-at-most-two squared-error regression tree on
+  discovery only. `--interaction-max-features` caps the explicit allowlist at 16;
+  `--interaction-max-rules` caps exports at 4 (defaults 16 and 4). Leaves are ranked
+  by discovery disagreement, never by evaluation performance.
+* Freezes structured `<=` / `>` predicates before evaluating them. A `multi_feature`
+  leaf uses two different source features; repeated splits on one feature remain
+  `single_feature`. No predicate is executable code.
+
+Numeric nulls and nonfinite values use the median of discovery values clipped to
++/-1e30 (zero for all-missing discovery columns). Transformed numbers are clipped
+to the same range, represented as float32, and compared to float64 tree thresholds.
+Categorical values use SHA256 of `type-name:value`, first eight digest bytes modulo
+16, with nulls encoded as -1. Unseen categories follow exactly the same stateless
+hash mapping; collisions are possible and bucket intervals are not natural category
+orderings. No private category vocabulary is exported. Hashing is not an anonymity
+guarantee.
+
+Classification disagreement means different predicted classes. For this explainer
+only, regression disagreement uses an absolute prediction gap greater than the
+configured regression multiplier times the distinct-discovery-row target standard
+deviation (one if constant). That normalization is frozen before evaluation; the
+existing disagreement CSV definition is unchanged.
+
+`interaction_rules.json` records the specification, ordered pair and recipes,
+seed/split method and counts, support limits, fitted schema, missing/unseen behavior,
+software versions, structured predicates and human-readable rule text.
+`interaction_rules.csv` contains per-rule discovery/evaluation support, paired
+evaluation disagreement, and quality difference. Both statistics first average
+within each original row, then equally across evaluation rows. Positive quality
+difference favors A: accuracy A minus B, or MAE B minus A for regression.
+Unsupported evaluation leaves have blank estimates, not zeroes. Empty discoveries
+have an explicit JSON status and a header-only CSV.
+
+These are **exploratory selected rules**, not independent confirmation. Subdividing
+an existing CV/prediction pool leaves shared-model dependence even with disjoint
+rows or groups. Confirmatory use needs a locked holdout unused by tuning, model
+selection, or discovery. Rules never enter automatic swap PASS/FAIL checks.
+New exports contain aggregates and learned thresholds/medians, not raw feature
+records, category vocabularies, row IDs, or group IDs. Existing disagreement CSVs
+still contain their original row-level evidence and features; review those before
+sharing an entire archive.
+
+Python callers can pass `interaction=InteractionSpec(...)` from
+`quibble_ml.interactions` to `analyse()` or report `build()`. A normal analysis
+without this opt-in removes prior interaction exports rather than leaving stale
+rules. Report regeneration preserves a saved explicit specification and recomputes
+rules from current evidence; see [Reports](reports.md#interaction-rule-evidence).

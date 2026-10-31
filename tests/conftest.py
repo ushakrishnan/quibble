@@ -5,6 +5,7 @@ for k, v in {"QUIBBLE_DEVICE": "cpu", "QUIBBLE_THREADS": "1", "QUIBBLE_JOBS": "1
              "QUIBBLE_CV": "holdout", "QUIBBLE_SPLIT_SEED": "0", "QUIBBLE_MODEL_SEEDS": "0",
              "QUIBBLE_PREPROCESS": "ordinal", "QUIBBLE_BOOT": "100", "QUIBBLE_SINGLE_N": "3",
              "QUIBBLE_TIMEOUT_S": "300", "QUIBBLE_TABPFN_MAX_ROWS": "",
+             "QUIBBLE_TABICL_ALLOW_DOWNLOAD": "0",
              "QUIBBLE_TABFM_N_ESTIMATORS": "4", "QUIBBLE_KUMO_SIZE": "small",
              "QUIBBLE_KUMO_N_ESTIMATORS": "4", "QUIBBLE_KEEP_MODELS": "0",
              "QUIBBLE_CACHE_DIR": ".cache", "QUIBBLE_DATA_HOME": "",
@@ -17,8 +18,8 @@ for k, v in {"QUIBBLE_DEVICE": "cpu", "QUIBBLE_THREADS": "1", "QUIBBLE_JOBS": "1
 
 import pytest  # noqa: E402
 
-from quibble.config import Config  # noqa: E402
-from quibble.run import run_one  # noqa: E402
+from quibble_ml.config import Config  # noqa: E402
+from quibble_ml.run import run_one  # noqa: E402
 
 BACKENDS = ("histgb", "lightgbm", "weak")
 DATASETS = ("breast_cancer", "diabetes_reg")

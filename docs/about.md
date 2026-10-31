@@ -13,12 +13,17 @@ whether a change is worth making.
 
 ## What it does
 
+For everyday examples, inputs, outputs and limits across the existing and new
+workflows, read [What Quibble does](what-quibble-does.md).
+
 Quibble is a local comparison and verification tool for tabular classification and
 regression. It evaluates prediction methods on identical held-out rows, then shows
 quality, uncertainty, calibration, slices, disagreements, execution costs, errors,
 and refusals. Configurable swap checks return PASS, FAIL, or INCONCLUSIVE.
 
-It is not a model tuner, deployment platform, or guarantee of real-world suitability.
+An optional bounded tree-tuning tier chooses settings using training examples
+only. Quibble is not an unrestricted AutoML service, deployment platform, or
+guarantee of real-world suitability.
 The [validation matrix](index.md#trust-levels-what-has-actually-been-run) distinguishes
 implemented adapters from paths verified on real hardware.
 
@@ -48,8 +53,10 @@ appear in About's project-status section, not the shared header.
 
 1. Choose data: review existing rows, or design a recipe, preview, confirm review,
    and choose **Save and continue**.
-2. Configure and run: choose methods, device policy, and a smoke or full comparison.
-3. Read results. Use **Past experiments** to reopen saved evidence independently.
+2. Methods and settings: choose methods, device policy, and a smoke or full comparison.
+3. Start and monitor: review the request and explicitly start execution.
+
+Use **Experiment history** to reopen complete reports and logs independently.
 
 For a recipe variant, **Save and continue** uses the saved variant, while
 **Discard changes and continue** uses the unchanged original. Both open configuration;
@@ -77,7 +84,7 @@ metrics, and reporting still use CPU. See [backends](backends.md) and
 
 The local About page displays the running package version. Quibble v0.0.1 is an
 experimental pre-release;
-the distribution name is `quibble-ml`, and its command/import name is `quibble`.
+the distribution and command name is `quibble-ml`, and its import name is `quibble_ml`.
 Install from source using [Getting started](getting-started.md).
 
 Quibble uses the MIT license. Optional libraries, datasets, and pretrained checkpoints
@@ -89,5 +96,5 @@ The [Pages deployment workflow](development.md#github-pages-deployment) publishe
 the docs and blog after repository setup and a successful deployment. The static site's
 Workbench page explains how to run the Python server locally; it does not execute models.
 Read the [documentation index](index.md) for all guides.
-For diagnostics, run `python -m quibble doctor` in the
+For diagnostics, run `python -m quibble_ml doctor` in the
 server's environment and review its output before sharing.

@@ -78,7 +78,8 @@ does not decide a paired difference or establish equivalence. Use paired swap ch
 meaningful limits. Details in [Analysis](analysis.md).
 
 ## What quibble is not
-- Not a hyperparameter tuner or an AutoML system; backends run with fixed, mostly default settings.
+- Not an unrestricted AutoML system. Default campaigns use documented recipes;
+  explicit tuned campaigns select tree settings inside training-only folds.
 - Not a model server or a deployment tool.
 - Not a universal API. Adding a backend takes about 20 lines because the interface is deliberately
   tiny, not because quibble hides differences between libraries.

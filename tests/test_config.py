@@ -1,7 +1,7 @@
 import pytest
 
-from quibble import config
-from quibble.config import Config
+from quibble_ml import config
+from quibble_ml.config import Config
 
 
 def test_cpu_toggle(monkeypatch):

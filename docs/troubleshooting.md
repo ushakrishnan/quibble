@@ -5,38 +5,56 @@ description: Resolve local installation, model execution, and report problems.
 
 ## Troubleshooting
 
+Find the first stage that failed: installation, data review, fitting, analysis,
+or reporting. An explicit refusal is different from a crash, and missing evidence
+is different from a bad score. Keep the failed record and log before retrying.
+
 ## Installation and environment
 **`pip install quibble` installs the wrong thing.**
 The name `quibble` on PyPI belongs to an unrelated project. This project's distribution name is
-`quibble-ml`, and it is not published yet. Activate this repository's `.venv`, install
-`python -m pip install -r requirements.txt`, then register the source with
-`python -m pip install --no-deps -e .`.
+`quibble-ml`, and it is not published yet. From this checkout run
+`uv sync --locked --extra web --extra data`, adding any wanted model extras,
+then activate this repository's `.venv`. There is no separate requirements file.
 
-**`quibble: command not found`.** Activate this repository's `.venv` and use
-`python -m quibble ...` from the repository root. Check `python -c "import sys; print(sys.executable)"`
+**`quibble-ml: command not found`.** Activate this repository's `.venv` and use
+`python -m quibble_ml ...` from the repository root. Check `python -c "import sys; print(sys.executable)"`
 to confirm you are not running another project's interpreter.
+The import is `quibble_ml`, not `quibble`. Re-register the checkout with
+`uv sync --locked --extra web --extra data` after updating from an older revision.
+See [Migration](getting-started.md#migrating-from-the-old-import-and-command);
+this project no longer installs the old command or import name.
 
 **`No module named 'resource'` (or errors on native Windows).** Current Quibble uses `psutil`
 on Windows and imports `resource` only on Unix. Run from the current source with the local
-`.venv`; reinstall the requirements to ensure Windows `psutil` is available.
+`.venv`; sync from the lock to ensure Windows `psutil` is available.
 
 **Installing AutoGluon or TabPFN broke CUDA or scikit-learn.** They pin their own dependency
-versions. Reinstall the complete requirements together in the local `.venv`, run `python -m pip check`,
-then `python -m quibble doctor`. The Windows requirements pin CUDA-enabled Torch;
-a compatible NVIDIA driver is still required.
+versions. Sync all selected extras together from the lock, run `uv pip check`,
+then `python -m quibble_ml doctor`. Retain `--extra windows-cuda` for native Windows
+CUDA wheels; a compatible NVIDIA driver is still required. Use `--dry-run` first:
+sync removes unselected libraries. A lock conflict must be resolved, not bypassed
+with an untracked install.
 Never install packages while a sweep is running: it changes libraries under the
 running processes and produces spurious errors.
 
+**Mitra refuses a version that appears in `torch.__version__`.** The runtime also
+requires valid installed-distribution metadata and the pinned Git source.
+A damaged Torch installation can import while lacking a verifiable package
+version. Do not edit metadata or weaken the guard. Use a healthy isolated
+environment resolved from the lock with all intended extras, then rerun
+`uv pip check` and doctor before downloading or fitting.
+
 ## Configuration
-**`config error: QUIBBLE_DEVICE=cuda but torch.cuda is not available`.** Run `quibble doctor`. Either
+**`config error: QUIBBLE_DEVICE=cuda but torch.cuda is not available`.** Run `quibble-ml doctor`. Either
 install a CUDA build of PyTorch (see [GPU and Docker](gpu-and-docker.md)) or set `QUIBBLE_DEVICE=cpu`.
 This strictness is deliberate.
 
 **`config error: QUIBBLE_CV must be 'holdout' or like '5x2'`.** Use `holdout` or `<folds>x<repeats>`.
 
 **`WARNING: N existing result(s) ... different settings ... being SKIPPED`.** Finished runs are
-identified by file name, not by settings. You changed device, preprocessing or CV scheme but reused
-the output directory. Use `--force`, or (better) a separate `--out` per configuration.
+already present, but recorded execution settings differ. Use a separate `--out` per
+configuration. `--force` can rerun records only when recipe compatibility checks
+permit it; it does not bypass algorithm, preprocessing or protocol-family guards.
 
 **My `.env` change had no effect.** A real environment variable of the same name wins over `.env`, and
 a command-line flag wins over both. In PowerShell, check
@@ -45,7 +63,8 @@ the loader preserves the first value rather than allowing later duplicates to ov
 
 ## Running
 **A backend shows `error: ModuleNotFoundError`.** Check that the local `.venv` is active and
-install `python -m pip install -r requirements.txt`. Then check `python -m pip check` and retry
+select its documented model extra with `uv sync --locked`, retaining other wanted
+extras. Then check `uv pip check` and retry
 with `--force`: saved import failures are cached too. Other backends are unaffected.
 
 **A backend shows `refused`.** Expected: it declined the task. For TabPFN this means too many rows,
@@ -59,7 +78,7 @@ to `--force` the affected cells.
 account or token, depending on the release. Pre-download once on a networked machine.
 
 **CatBoost on GPU fails.** Try `--device cpu` for CatBoost to confirm the model itself works, then
-check your CUDA and driver versions with `quibble doctor`.
+check your CUDA and driver versions with `quibble-ml doctor`.
 
 **A model runs out of RAM/VRAM, or its worker exits.** Read the report's detailed failure
 table and the run record's `error_kind`, `device_attempted`, and `worker_exit_code`.
@@ -93,12 +112,12 @@ See [Testing your own data](testing-your-data.md). Built-in/OpenML names are res
 Restore the exact original input or use a new `--out`; `--force` does not bypass the guard.
 Reports need the original features to regenerate slices.
 
-**`quibble datasets --verify` prints `ERROR` for an OpenML dataset.** Usually network access or a wrong
+**`quibble-ml datasets --verify` prints `ERROR` for an OpenML dataset.** Usually network access or a wrong
 id. Offline, use `breast_cancer`, `wine` and `diabetes_reg`.
 Verification now returns 1 for any error or name mismatch.
 
 **`NAME MISMATCH`.** The id points at a different dataset than the registry expects. Fix the id in
-`quibble/datasets.py`.
+`quibble_ml/datasets.py`.
 
 ## Analysis
 **`no results for <dataset>`.** The dataset folder has no run records under the output directory you
@@ -106,7 +125,7 @@ pointed at. Check `--out`.
 
 **`no splits completed by all backends`.** Either no backend has usable predictions, or the
 usable backends have no common successful split. Entirely failed backends are otherwise
-excluded from pooled analysis. Run `quibble report` and look at participation/failures, or restrict
+excluded from pooled analysis. Run `quibble-ml report` and look at participation/failures, or restrict
 with `--backends`.
 
 **`(skipping <backend>: no usable runs)` / `incumbent has no usable runs`.** The backend has run
@@ -122,8 +141,8 @@ test generality, not this dataset's uncertainty. Do not turn uncertainty into a 
 **A large dataset runs out of memory during analysis.** The bootstrap holds a `QUIBBLE_BOOT x n_rows`
 matrix. Lower `QUIBBLE_BOOT` (for example `QUIBBLE_BOOT=200`).
 
-**The report has no figures.** Matplotlib is in the requirements. Activate the local `.venv`,
-reinstall `python -m pip install -r requirements.txt`, and regenerate the report.
+**The report has no figures.** Select the `report` or `web` extra in your locked sync
+command, retaining other wanted extras, then regenerate the report.
 
 ## Browser workbench
 
@@ -155,8 +174,11 @@ a successful draft; neither invalid response is silently saved.
 
 **A dataset is missing from the selector.** Check the outcome filter: classification
 includes binary and multiclass, while regression is separate. A local folder with the
-same name overrides a bundled example. The browser does not upload arbitrary files;
-use the [local-data manifest workflow](testing-your-data.md).
+same name overrides a bundled example. For a new file, choose **Upload CSV / Parquet**
+in the local workbench, review its column roles, validate, and confirm saving.
+The [local-data guide](testing-your-data.md) also supports manually prepared manifests.
+Unavailable or changed sources appear as dataset errors. Correct the source or
+import a new reviewed dataset; saved experiment reports remain accessible.
 
 ## Docker
 **Permission denied writing `results/`.** The container runs as UID 1000. `sudo chown -R 1000:1000
@@ -166,6 +188,6 @@ results .cache` on the host.
 support in Docker Desktop's WSL2 backend), then retry the `gpu` service.
 
 ## Still stuck
-Run `quibble doctor`, re-run the failing command with a single backend and dataset, and look at the
+Run `quibble-ml doctor`, re-run the failing command with a single backend and dataset, and look at the
 run record in `results/<dataset>/` (the `error` field has the exception). The test suite
 (`pytest`) is a quick way to tell whether the installation itself is healthy.

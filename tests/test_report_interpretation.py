@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble.report import build, interpretation
+from quibble_ml.report import build, interpretation
 
 
 def analysis(metric="accuracy", values=(0.90, 0.95), names=("fast", "quality")):
@@ -145,7 +145,7 @@ def test_smoke_interpretation_explains_measurements_without_recommending_winners
 
 
 def test_unanalyzable_dataset_still_has_interpretation(monkeypatch, tmp_path):
-    from quibble import report
+    from quibble_ml import report
     monkeypatch.setattr(report, "analyse", lambda *a, **k: (_ for _ in ()).throw(
         report.AnalysisError("no usable predictions")))
     monkeypatch.setattr(report, "_plt", lambda: None)
@@ -156,7 +156,7 @@ def test_unanalyzable_dataset_still_has_interpretation(monkeypatch, tmp_path):
 
 
 def test_build_matches_costs_to_analyzed_model_seed_and_splits(monkeypatch, tmp_path):
-    from quibble import report
+    from quibble_ml import report
     res = analysis(values=(0.9,), names=("only",))
     runs = [
         {"backend": "only", "model_seed": 0, "split_seed": 0,

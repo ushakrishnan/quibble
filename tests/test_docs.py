@@ -5,7 +5,12 @@ from urllib.parse import unquote, urlsplit
 
 import pytest
 
-from quibble.cli import COMMANDS
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+from quibble_ml.cli import COMMANDS
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = [ROOT / "README.md"] + sorted((ROOT / "docs").rglob("*.md"))
@@ -40,19 +45,19 @@ def test_docs_exist():
 
 
 def test_threshold_links_and_policy_workflow_match_the_packaged_resource():
-    assert (ROOT / "quibble" / "swap_thresholds.json").is_file()
+    assert (ROOT / "quibble_ml" / "swap_thresholds.json").is_file()
     assert not (ROOT / "swap_thresholds.example.json").exists()
     assert '"swap_thresholds.json"' in (ROOT / "pyproject.toml").read_text()
     for path, text in TEXT.items():
         assert "swap_thresholds.example.json" not in text, path
     guide = TEXT[ROOT / "docs" / "swap.md"]
     for detail in ("--export-thresholds", "--require-thresholds", "Custom policy",
-                   "../quibble/swap_thresholds.json", "Download effective policy"):
+                   "../quibble_ml/swap_thresholds.json", "Download effective policy"):
         assert detail in guide
 
 
 def test_release_metadata_is_consistent():
-    from quibble import __version__
+    from quibble_ml import __version__
 
     metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert f'version = "{__version__}"' in metadata
@@ -68,22 +73,22 @@ def test_standalone_docs_and_current_browser_actions():
     assert "[Getting started](getting-started.md)" in home
     assert "[Documentation index](index.md)" in home
     setup = TEXT[ROOT / "docs" / "getting-started.md"]
-    assert "uv venv --python 3.13 --seed .venv" in setup
-    assert "pip install -r requirements.txt" in setup
+    assert "uv sync --locked --python 3.13 --extra web --extra data" in setup
+    assert "uv.lock" in setup and "pyproject.toml" in setup
     assert "../README.md" not in setup
     for path in (ROOT / "README.md", ROOT / "docs" / "about.md",
                  ROOT / "docs" / "experiment-workbench.md"):
         text = TEXT[path]
-        for action in ("Save and continue", "Discard changes and continue", "Past experiments"):
+        for action in ("Save and continue", "Discard changes and continue", "Experiment history"):
             assert action in text, path.name
         assert "About" in text and "GitHub" in text and "Docs" in text
     assert "Use as-is" not in TEXT[ROOT / "docs" / "experiment-workbench.md"]
 
 
 def test_bundled_dataset_inventory_is_documented():
-    from quibble.web import ASSETS
+    from quibble_ml.web import ASSETS
     guide = TEXT[ROOT / "docs" / "datasets.md"]
-    for directory in (ROOT / "quibble" / "sample_data").iterdir():
+    for directory in (ROOT / "quibble_ml" / "sample_data").iterdir():
         if directory.is_dir():
             assert f"| `{directory.name}` |" in guide
     assert (ASSETS / "about.html").is_file()
@@ -113,7 +118,7 @@ def test_public_blog_uses_current_titles_and_public_assets():
 
 
 def test_dataset_guide_covers_complete_registry_and_locations():
-    from quibble.datasets import BUILTIN, OPENML
+    from quibble_ml.datasets import BUILTIN, OPENML
     text = TEXT[ROOT / "docs" / "datasets.md"]
     for name in BUILTIN:
         assert f"| `{name}` |" in text
@@ -134,12 +139,12 @@ def test_dataset_guide_covers_complete_registry_and_locations():
         assert source in text
 
 
-def test_readme_uses_local_requirements_setup():
+def test_readme_uses_locked_project_setup():
     text = TEXT[ROOT / "README.md"]
     assert r".\.venv\Scripts\Activate.ps1" in text
-    assert "pip install -r requirements.txt" in text
-    assert "pip install --no-deps -e ." in text
-    assert 'pip install -e ".[' not in text
+    assert "uv sync --locked --python 3.13 --extra web --extra data" in text
+    assert "uv pip check" in text
+    assert "requirements.txt" not in text
     assert not re.search(r"LTMStarter[\\/]+\.(?:venv|cache)", text)
     assert "torch==2.7.0" not in text
     assert "[Testing your own data](docs/testing-your-data.md)" in text
@@ -155,9 +160,13 @@ def test_local_data_guide_covers_the_implemented_manifest_and_workflow():
         assert detail in text
 
 
-def test_requirements_cover_backends_reporting_and_tests():
+def test_manifest_covers_backends_reporting_and_tests():
     from packaging.requirements import Requirement
-    entries = [line.strip() for line in (ROOT / "requirements.txt").read_text().splitlines()]
+    manifest = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    entries = list(manifest["project"]["dependencies"])
+    for extra in manifest["project"]["optional-dependencies"].values():
+        entries.extend(extra)
+    entries.extend(manifest["dependency-groups"]["dev"])
     requirements = {req.name.lower(): req for line in entries
                     if line and not line.startswith(("#", "--")) for req in [Requirement(line)]}
     for name in ("numpy", "pandas", "scikit-learn", "lightgbm", "catboost", "tabpfn",
@@ -167,7 +176,14 @@ def test_requirements_cover_backends_reporting_and_tests():
     assert "pytorch" in requirements["tabfm"].extras
     assert requirements["psutil"].marker.evaluate({"sys_platform": "win32"})
     assert not requirements["psutil"].marker.evaluate({"sys_platform": "linux"})
-    assert "--extra-index-url https://download.pytorch.org/whl/cu128" in entries
+    index = manifest["tool"]["uv"]["index"][0]
+    assert index["url"] == "https://download.pytorch.org/whl/cu128"
+    assert index["explicit"] is True
+    for package in ("torch", "torchvision"):
+        assert manifest["tool"]["uv"]["sources"][package][0]["extra"] == "windows-cuda"
+    assert requirements["structured-data-models"].marker.evaluate({"python_version": "3.11"})
+    assert not requirements["structured-data-models"].marker.evaluate({"python_version": "3.10"})
+    assert not requirements["autogluon.tabular"].marker.evaluate({"python_version": "3.14"})
     for name, version in (("torch", "2.11.0+cu128"), ("torchvision", "0.26.0+cu128")):
         requirement = requirements[name]
         assert str(requirement.specifier) == f"=={version}"
@@ -176,8 +192,15 @@ def test_requirements_cover_backends_reporting_and_tests():
         assert not requirement.marker.evaluate({"sys_platform": "darwin"})
 
 
-def test_requirements_use_one_file():
+def test_manifest_and_lock_replace_requirements_files():
+    assert not (ROOT / "requirements.txt").exists()
     assert not (ROOT / "requirements-extra.txt").exists()
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    project = next(p for p in lock["package"] if p["name"] == "quibble-ml")
+    assert project["source"] == {"editable": "."}
+    for path,text in TEXT.items():
+        assert "requirements.txt" not in text, path
+        assert "quibble_ml.git" not in text, path
 
 
 def test_relative_links_resolve():
@@ -236,8 +259,8 @@ def test_env_template_has_no_duplicate_settings():
 def test_env_template_cache_defaults_follow_root(tmp_path, monkeypatch):
     import os
 
-    from quibble.cache import prepare_caches
-    from quibble.config import load_dotenv
+    from quibble_ml.cache import prepare_caches
+    from quibble_ml.config import load_dotenv
 
     entries = re.findall(r"^(QUIBBLE_[A-Z_]+)=", (ROOT / ".env.example").read_text(), flags=re.M)
     monkeypatch.setattr(os, "environ", os.environ.copy())
@@ -253,7 +276,7 @@ def test_env_template_cache_defaults_follow_root(tmp_path, monkeypatch):
 
 
 def test_every_env_var_in_docs_exists_in_code():
-    code = "".join(p.read_text() for p in (ROOT / "quibble").glob("*.py")) + (ROOT / ".env.example").read_text()
+    code = "".join(p.read_text() for p in (ROOT / "quibble_ml").glob("*.py")) + (ROOT / ".env.example").read_text()
     known = set(re.findall(r"QUIBBLE_[A-Z_]+", code))
     for f, text in TEXT.items():
         for v in set(re.findall(r"QUIBBLE_[A-Z][A-Z_]+[A-Z]", text)):
@@ -269,17 +292,17 @@ def test_every_setting_is_documented():
 def test_commands_shown_in_docs_are_real():
     valid = set(COMMANDS) | {"demo"}
     for f, text in TEXT.items():
-        found = set(re.findall(r"`quibble ([a-z]+)[^`]*`", text))
+        found = set(re.findall(r"`quibble-ml ([a-z]+)[^`]*`", text))
         for block in re.findall(r"```[a-z]*\n(.*?)```", text, flags=re.S):  # fenced code only
-            found |= set(re.findall(r"^\s*(?:\$ )?quibble ([a-z]+)", block, flags=re.M))
+            found |= set(re.findall(r"^\s*(?:\$ )?quibble-ml ([a-z]+)", block, flags=re.M))
         for cmd in found:
-            assert cmd in valid, f"{f.name}: unknown command 'quibble {cmd}'"
+            assert cmd in valid, f"{f.name}: unknown command 'quibble-ml {cmd}'"
 
 
 def test_every_command_is_documented():
     ref = (ROOT / "docs" / "cli-reference.md").read_text()
     for cmd in set(COMMANDS) | {"demo"}:
-        assert f"quibble {cmd}" in ref, cmd
+        assert f"quibble-ml {cmd}" in ref, cmd
 
 
 @pytest.mark.parametrize("command", sorted((set(COMMANDS) | {"demo"}) - {"doctor"}))
@@ -287,9 +310,9 @@ def test_documented_flags_exist(command):
     """Flags documented in each command section must appear in its generated help."""
     import subprocess
     import sys
-    help_text = subprocess.run([sys.executable, "-m", "quibble", command, "--help"],
+    help_text = subprocess.run([sys.executable, "-m", "quibble_ml", command, "--help"],
                                capture_output=True, text=True, check=True).stdout
     ref = (ROOT / "docs" / "cli-reference.md").read_text()
-    section = ref.split(f"## `quibble {command}`")[1].split("\n## ", 1)[0]
+    section = ref.split(f"## `quibble-ml {command}`")[1].split("\n## ", 1)[0]
     for flag in set(re.findall(r"`(--[a-z-]+)", section)):
-        assert flag in help_text, f"documented flag {flag} not accepted by `quibble {command}`"
+        assert flag in help_text, f"documented flag {flag} not accepted by `quibble-ml {command}`"

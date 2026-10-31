@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="quibble-token" content="__CSRF_TOKEN__">
+  <title>Quibble | Prediction experiments</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="workbench">
+<a class="skip-link" href="#workbench-content">Skip to workbench</a>
+__PRODUCT_HEADER__
+<div class="workbench-shell">
+  <button id="open-navigation" class="secondary mobile-navigation" aria-controls="workbench-sidebar" aria-expanded="false">Menu</button>
+  <aside id="workbench-sidebar" class="workbench-sidebar" aria-label="Workbench navigation">
+    <button id="close-navigation" class="secondary mobile-navigation">Close menu</button>
+    <button class="secondary rail-toggle" data-rail-toggle aria-pressed="false" aria-label="Compact navigation" title="Compact navigation">⇔</button>
+    <!-- Original Quibble navigation SVG subset, dedicated to the public domain
+         under CC0-1.0: https://creativecommons.org/publicdomain/zero/1.0/
+         No third-party artwork, external assets or executable SVG. -->
+    <nav aria-label="Workbench">
+      <a href="#page=home" aria-label="Home"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8M6 9v12h12V9M10 21v-7h4v7"/></svg><span class="nav-label">Home</span></a>
+      <details data-nav-group="data" open><summary aria-label="Data"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 4v16M4 14h16"/></svg><span class="nav-label">Data</span></summary>
+        <a href="#page=data&amp;source=existing">Datasets</a>
+        <a href="#page=data&amp;source=new">Design new dataset</a>
+      </details>
+      <details data-nav-group="run" open><summary aria-label="Run experiment"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 14 8-14 8z"/></svg><span class="nav-label">Run experiment</span></summary>
+        <a href="#page=run&amp;step=data">1. Choose data</a>
+        <a href="#page=run&amp;step=methods">2. Methods and settings</a>
+        <a href="#page=run&amp;step=start">3. Start and monitor</a>
+      </details>
+      <details data-nav-group="history" open><summary aria-label="Results"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v18h17M8 17v-6M13 17V7M18 17V4"/></svg><span class="nav-label">Results</span></summary>
+        <a id="nav-history" href="#page=history">Experiment history</a>
+        <a href="#page=verify">Verify saved evidence</a>
+        <a href="#page=compare">Compare two experiments</a>
+      </details>
+      <details data-nav-group="system" open><summary aria-label="System"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H4zM8 21h8M12 17v4M8 9h8M8 13h5"/></svg><span class="nav-label">System</span></summary>
+        <a href="#page=backends">Backends and verification</a>
+        <a href="#page=settings">Settings and theme</a>
+      </details>
+      <details data-nav-group="help" open><summary aria-label="Help"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 1 1 4 3c-1 0-1 1-1 2M12 17v1"/></svg><span class="nav-label">Help</span></summary>
+        <a href="/docs/README.md" target="_blank" rel="noopener noreferrer">Documentation</a>
+        <a href="/blog" target="_blank" rel="noopener noreferrer">Blog</a>
+        <a href="/about" target="_blank" rel="noopener noreferrer">About</a>
+        <a href="https://github.com/ushakrishnan/quibble" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </details>
+    </nav>
+  </aside>
+<main id="workbench-content" tabindex="-1">
+  <div class="workbench-page-header">
+    <nav id="workbench-breadcrumb" class="docs-breadcrumb" aria-label="Workbench breadcrumb">Home</nav>
+    <h2 id="page-heading" tabindex="-1">Home</h2>
+  </div>
+  <div id="run-progress" class="run-progress" role="status" aria-live="polite" hidden>
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="run-progress-text"></span>
+    <a id="active-job-link" href="#page=run&amp;step=start">View running experiment</a>
+    <button id="reconnect" class="secondary">Refresh status</button>
+  </div>
+  <div id="status" role="status" aria-live="polite">Loading workbench...</div>
+  <div id="workflow-actions-top" class="workflow-action-bar" hidden>
+    <div class="actions"><button id="workflow-back-top" class="secondary">Back</button><button id="workflow-primary-top" disabled>Continue</button></div>
+    <p id="workflow-reason-top" class="hint"></p>
+  </div>
+  <section id="home-path">
+    <h3>Prediction experiments, with the evidence intact.</h3>
+    <p>Review data, compare methods on the same evaluation rows, and read what the results do and do not establish.</p>
+    <div class="actions"><a class="button-link" href="#page=run&amp;step=data">Start experiment</a><a href="#page=data&amp;source=upload">Upload CSV / Parquet</a></div>
+    <p id="home-setup"></p>
+    <h3>Recent browser experiments</h3>
+    <p class="hint">Up to 30 jobs from this server's results directory, not the complete CLI results archive. Completed describes execution, not a PASS verdict.</p>
+    <div id="home-jobs"></div>
+  </section>
+  <section id="history-path" hidden>
+    <h3>Experiment history</h3>
+    <p>Up to 30 recent browser jobs. Older bookmarked links still reopen from this server's results directory. Opening a report does not train models.</p>
+    <div id="history-jobs"></div>
+  </section>
+  <section id="backends-path" hidden>
+    <h3>Registry and verification</h3>
+    <p>Registered does not mean installed, licensed for your use, compatible with your device, or verified. This inventory uses existing server metadata, not a new environment check.</p>
+    <div id="backend-inventory"></div>
+    <h3>Explicit local diagnostics</h3>
+    <p>Package versions only. No credentials, environment variables, cache paths, private data, GPU initialization or network checks. Missing optional packages are unavailable, not failures.</p>
+    <button id="collect-environment" class="secondary">Collect local package diagnostics</button>
+    <button id="download-environment" class="secondary" disabled>Download diagnostics JSON</button>
+    <pre id="environment-result" aria-live="polite">Not collected. Navigation never collects diagnostics.</pre>
+    <a href="/docs/backends.md" target="_blank" rel="noopener noreferrer">Backend limits and verification details</a>
+  </section>
+  <section id="verify-path" hidden>
+    <h3>Verify saved evidence — no training</h3>
+    <p>Uses complete full-run predictions, source validation, recorded recipes and the original saved policy. Smoke, failed, excluded or incomplete evidence is refused. No fits, model downloads or provider calls. The bounded check may take up to 120 seconds; job status remains readable.</p>
+    <label>Saved experiment <select id="verify-job"><option value="">Choose saved evidence</option></select></label>
+    <button id="load-verify-job" class="secondary">Load methods and saved checks</button>
+    <p id="verify-context"></p>
+    <label>Incumbent / baseline <select id="verify-incumbent"></select></label>
+    <label>Candidate <select id="verify-candidate"></select></label>
+    <label>Baseline minimum gain <input id="verify-min-gain" type="number" min="0" step="0.001" value="0"></label>
+    <p>Swap checks replacement against the saved acceptance policy. Baseline gate checks only improvement by the chosen margin using the saved primary metric. They are not interchangeable. PASS is not production-safety approval.</p>
+    <div class="actions"><button id="verify-swap" disabled>Check swap</button><button id="verify-gate" disabled>Check baseline gate</button><button id="download-verification" class="secondary" disabled>Download selected check JSON</button></div>
+    <p id="verify-status" role="status" aria-live="polite"></p>
+    <div id="verification-history"></div>
+    <pre id="verification-result"></pre>
+  </section>
+  <section id="compare-path" hidden>
+    <h3>Two-experiment evidence comparison</h3>
+    <p>Descriptive only: checks source, task, rows, labels, splits, coverage, recipe, execution and saved policy differences. Never infers a winner, scientific equivalence or paired verdict. Incompatible sources show configuration only, not a common quality ranking.</p>
+    <label>First experiment <select id="compare-left"><option value="">Choose saved evidence</option></select></label>
+    <label>Second experiment <select id="compare-right"><option value="">Choose saved evidence</option></select></label>
+    <button id="compare-jobs">Compare saved evidence</button>
+    <button id="download-comparison" class="secondary" disabled>Download comparison JSON</button>
+    <p id="comparison-status" role="status" aria-live="polite"></p>
+    <div id="comparison-result" class="evidence-columns"></div>
+  </section>
+  <section id="settings-path" hidden>
+    <h3>Appearance</h3>
+    <p>Independent preferences are stored only in this browser. They do not change saved evidence or configure server credentials. System follows your operating-system color mode; forced colors remain supported.</p>
+    <fieldset class="appearance-settings"><legend>Settings and theme</legend>
+      <label>Color theme <select data-theme-select hidden><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label>Accent <select data-accent-select hidden><option value="blue">Blue</option><option value="teal">Teal</option><option value="indigo">Indigo</option><option value="violet">Violet</option><option value="fuchsia">Fuchsia</option><option value="slate">Slate</option></select></label>
+      <label>Contrast <select data-contrast-select hidden><option value="standard">Standard</option><option value="high">High</option></select></label>
+      <label>Desktop navigation <select data-rail-select hidden><option value="expanded">Labeled sidebar</option><option value="collapsed">Compact icon rail</option></select></label>
+    </fieldset>
+    <div class="appearance-preview" role="group" aria-label="Appearance preview">
+      <h4>Preview — not experiment evidence</h4>
+      <button type="button">Primary button</button>
+      <span class="preview-selected">Selected item</span>
+      <a href="#page=settings">Ordinary link</a>
+      <button type="button" class="secondary preview-focus">Focus example</button>
+      <p class="error">Validation example: review the selected dataset before continuing.</p>
+      <span class="verdict verdict-pass">PASS</span>
+      <span class="verdict verdict-fail">FAIL</span>
+      <span class="verdict verdict-inconclusive">INCONCLUSIVE</span>
+    </div>
+  </section>
+  <nav id="workflow-steps" class="actions workflow-steps" aria-label="Experiment workflow steps" hidden>
+    <button id="nav-data" class="secondary" aria-current="step">1. Choose data</button>
+    <button id="nav-run" class="secondary">2. Methods and settings</button>
+    <button id="nav-results" class="secondary">3. Start and monitor</button>
+  </nav>
+  <section id="data-choice" aria-labelledby="data-heading">
+    <h2 id="data-heading">Choose your starting point</h2>
+    <div class="actions" role="group" aria-label="Dataset source">
+      <button id="choose-existing" aria-pressed="true">Use existing dataset</button>
+      <button id="choose-new" class="secondary" aria-pressed="false">Design new dataset</button>
+      <button id="choose-upload" class="secondary" aria-pressed="false" disabled>Upload CSV / Parquet</button>
+    </div>
+    <div id="existing-path">
+      <p>Choose saved data, inspect its rows and assumptions, then continue. No generation or provider call is needed.</p>
+      <label>Outcome type <select id="sample-task"><option value="classification">Classification (binary or multiclass)</option><option value="regression">Regression</option></select></label>
+      <label>Dataset <select id="dataset"></select></label>
+      <p id="dataset-errors" class="error" role="status" hidden></p>
+      <button id="inspect-existing" class="secondary">Review selected dataset</button>
+      <div id="existing-review" hidden>
+        <p id="existing-summary"></p>
+        <details id="existing-explanation" hidden><summary>About this saved dataset</summary><div id="existing-explanation-content"></div></details>
+        <div id="existing-table" class="table-wrap"></div>
+        <p id="existing-source-note" class="hint" hidden></p>
+        <details id="existing-metadata-details" hidden><summary id="existing-metadata-title">Saved source and generation specification</summary><pre id="existing-metadata"></pre></details>
+        <label class="check"><input id="existing-agreed" type="checkbox"> I reviewed this saved sample. Use this dataset as-is.</label>
+        <button id="use-existing" disabled>Continue to experiment</button>
+        <details id="variant-options" hidden>
+          <summary>Advanced: create a dataset variant</summary>
+          <p>Copy this recipe into the new-design editor, change it, then preview and save under a new name. The original stays unchanged.</p>
+          <button id="edit-existing" class="secondary" hidden>Create variant from this recipe</button>
+        </details>
+      </div>
+    </div>
+    <div id="upload-path" hidden>
+      <h3>Upload labeled data from your computer</h3>
+      <p>Your file stays local. Parsing, preview and schema review do not call a planning provider or train a model. Include the outcome column you want to predict.</p>
+      <p id="upload-limits" class="hint"></p>
+      <label>CSV or Parquet file <input id="upload-file" type="file" accept=".csv,.parquet"></label>
+      <div class="actions"><button id="upload-send">Upload and inspect locally</button><button id="upload-cancel" class="secondary" disabled>Cancel staged upload</button></div>
+      <progress id="upload-progress" aria-label="Uploading and inspecting data locally" hidden></progress>
+      <div id="upload-summary" role="status" aria-live="polite"></div>
+      <div id="upload-sample" class="table-wrap"></div>
+      <fieldset id="upload-roles" disabled>
+        <legend>Review column roles and evaluation</legend>
+        <p>Drop identifiers and future-only information. Group/time columns are excluded from predictors. Date-looking text alone does not make an evaluation temporal. Suggested types never change your source file.</p>
+        <label>Unique dataset name <input id="upload-name" maxlength="100" placeholder="payments_reviewed"></label>
+        <label>Outcome column <select id="upload-target"></select></label>
+        <label>Outcome type <select id="upload-task"><option value="">Choose explicitly</option><option value="classification">Classification: labels or classes</option><option value="regression">Regression: finite numeric outcome</option></select></label>
+        <label>Drop columns (multiple selection) <select id="upload-drop" multiple size="5"></select></label>
+        <label>Categorical predictors (multiple selection) <select id="upload-categorical" multiple size="5"></select></label>
+        <label>Group column (optional) <select id="upload-group"></select></label>
+        <label>Time column (optional) <select id="upload-time"></select></label>
+        <label>Split design <select id="upload-split"><option value="random">Random</option><option value="group">Keep groups separate</option><option value="temporal">Train before test in time</option></select></label>
+        <label>Reviewed evaluation <select id="upload-cv"><option value="holdout">Single holdout</option><option value="3x1">3 folds, 1 repeat</option><option value="3x2">3 folds, 2 repeats</option></select></label>
+        <button id="upload-validate">Validate these roles and splits</button>
+      </fieldset>
+      <pre id="upload-validation"></pre>
+      <label class="check"><input id="upload-confirmed" type="checkbox" disabled> I reviewed the actual sample, column roles, target and split validation. Save the original file locally.</label>
+      <button id="upload-save" disabled>Save uploaded dataset and continue</button>
+      <details id="relational-intake">
+        <summary>Advanced: import named relational tables</summary>
+        <p>Separate from flat upload. All tables stay local. Supply a schema-1 manifest with explicit primary/foreign keys, observed-only features, event/availability timestamps, prediction entity, horizon and official train/validation/test assignments. Nothing is inferred silently.</p>
+        <p>Supported routes: CPU HistGB, LightGBM and CatBoost, official holdout only. Flattened features are not a relational-native model. Repeated-entity uncertainty retains a temporal-dependence caveat.</p>
+        <label>Unique relational dataset name <input id="relational-name" maxlength="64" placeholder="my_relational_task"></label>
+        <label>Named CSV / Parquet tables (filenames must match manifest table names)
+          <input id="relational-files" type="file" accept=".csv,.parquet" multiple>
+        </label>
+        <label>Load manifest JSON <input id="relational-manifest-file" type="file" accept=".json"></label>
+        <label>Review explicit relational manifest
+          <textarea id="relational-manifest" rows="12" spellcheck="false" placeholder='{"schema_version":1,"tables":{},"relations":[],"task":{},"recipe":{},"split":{}}'></textarea>
+        </label>
+        <p class="hint">Use the documented synthetic fixture as a complete example. Declared file paths must be tables/NAME.csv or tables/NAME.parquet and hashes must match the selected bytes. Maximum 16 MB/file, 64 MB combined; full row/feature/join budgets are enforced during validation. No existing dataset can be overwritten.</p>
+        <div class="actions"><button id="relational-stage">Stage tables locally</button><button id="relational-review" disabled>Validate relational schema and cutoffs</button><button id="relational-cancel" class="secondary" disabled>Cancel relational stage</button></div>
+        <p id="relational-status" role="status" aria-live="polite"></p>
+        <pre id="relational-summary"></pre>
+        <label class="check"><input id="relational-confirmed" type="checkbox" disabled> I reviewed every named table, primary/foreign key, relationship, timestamp role, target/horizon, feature recipe and official split contract.</label>
+        <button id="relational-save" disabled>Atomically save relational dataset and continue</button>
+      </details>
+    </div>
+  </section>
+  <section id="new-path" aria-labelledby="scenario-heading" hidden>
+    <div class="step">01 / CHOOSE DATA / NEW DESIGN</div>
+    <h2 id="scenario-heading">What would you like to predict?</h2>
+    <p class="hint">Why generate fresh data? Create new rows under explicit rules instead of relying only on familiar public benchmarks that pretrained predictors may have encountered. This reduces reuse of benchmark rows, but does not prove a task is unseen or free from bias. Vary one condition at a time, repeat across generation seeds, and check useful findings on representative real data. You can also use an existing dataset below.</p>
+    <p id="provider"></p>
+    <div class="controls">
+      <label>Outcome type <select id="task"><option value="classification">Yes/no (binary classification)</option><option value="regression">Continuous score (regression)</option></select></label>
+    </div>
+    <p class="hint" id="task-example">Binary example: will inventory fall short before the next delivery? Predict 0 (covers demand) or 1 (shortfall).</p>
+    <p class="hint" id="design-mode" role="status">Design mode: describe a new dataset, or choose a ready-made dataset to reuse saved rows.</p>
+    <label for="scenario">Scenario description</label>
+    <textarea id="scenario" rows="4" maxlength="6000" placeholder="Describe your own prediction problem: what one row represents, which inputs are known beforehand, and the outcome to predict."></textarea>
+    <div class="controls">
+      <label>Rows <input id="rows" type="number" min="50" max="50000" value="1000"></label>
+      <label>Predictor fields <input id="fields" type="number" min="1" max="100" value="8"></label>
+      <label>Generation seed <input id="seed" type="number" min="0" max="4294967295" value="42"></label>
+    </div>
+    <p class="hint">Choose classification for “will inventory cover demand: yes/no.” Regression predicts a continuous synthetic score instead, not a yes/no answer or automatically demand units. The selected outcome type takes precedence; review the target meaning and assumptions in the proposed design.</p>
+    <p class="hint" id="limits"></p>
+    <label class="check"><input id="consent" type="checkbox"> I approve sending this description and generation controls to my configured planning provider. Do not enter sensitive information.</label>
+    <div class="actions">
+      <button id="plan">Propose a scenario with my provider</button>
+    </div>
+    <p class="hint">To design your own dataset, enter your scenario and choose Propose a scenario with my provider. Invalid provider output may trigger one correction request; provider charges can apply to both requests. Credentials stay in the server environment.</p>
+  </section>
+  <section id="review-path" aria-labelledby="review-heading" hidden>
+    <div class="step">01 / CHOOSE DATA / REVIEW NEW DESIGN</div>
+    <h2 id="review-heading">Inspect the specification before creating data.</h2>
+    <p>Review the scenario assumptions and field rules. Edit the JSON to change the dataset name, ranges, effects, interactions, noise, or missingness. Re-preview after any edit.</p>
+    <label for="dataset-name">New dataset name</label>
+    <input id="dataset-name" placeholder="Choose a new, unused name" disabled>
+    <p class="hint">The planner suggests a name; you can change it here. Existing datasets are never overwritten. Change the name and preview again to save a new variant.</p>
+    <details id="dataset-explanation" hidden>
+      <summary>About this dataset</summary>
+      <div id="dataset-explanation-content"></div>
+    </details>
+    <ul id="assumptions"></ul>
+    <label for="spec">Editable generation specification</label>
+    <textarea id="spec" rows="16" spellcheck="false" placeholder="Create a plan above to begin."></textarea>
+    <button id="preview" disabled>Generate and inspect preview</button>
+    <div id="summary"></div>
+    <div class="table-wrap" id="preview-table"></div>
+    <label class="check"><input id="reviewed" type="checkbox" disabled> I reviewed this specification and sample. Save the full synthetic dataset locally.</label>
+    <div class="actions">
+      <button id="save" disabled>Save and continue</button>
+      <button id="discard-variant" class="secondary" hidden>Discard changes and continue</button>
+    </div>
+    <p id="saved"></p>
+  </section>
+  <section id="run-path" aria-labelledby="experiment-heading" hidden>
+    <div class="step">02 / METHODS AND SETTINGS</div>
+    <h2 id="experiment-heading">Configure the comparison.</h2>
+    <p id="chosen-dataset"></p>
+    <button id="change-dataset" class="secondary">Change dataset</button>
+    <div class="controls">
+      <label>Device policy <select id="device"><option value="cpu">CPU (pinned)</option><option value="auto">Auto (resolved once)</option><option value="cuda">CUDA (strict)</option></select></label>
+      <label>Experiment <select id="mode"><option value="smoke">Smoke: bounded setup check</option><option value="full">Full training splits</option></select></label>
+      <label>Full-run splits <select id="cv"><option value="3x2">3 folds, 2 repeats</option><option value="3x1">3 folds, 1 repeat</option><option value="holdout">Single holdout</option></select></label>
+    </div>
+    <fieldset><legend>Prediction methods (choose up to four)</legend><div id="methods"></div></fieldset>
+    <p id="device-status" class="hint" role="status" aria-live="polite"></p>
+    <fieldset>
+      <legend>Comparison tier</legend>
+      <label>Recipe tier <select id="tier"><option value="defaults">Defaults (no tree search)</option><option value="tuned">Tuned trees (explicit approval required)</option></select></label>
+      <div id="tuning-controls" hidden>
+        <div class="controls">
+          <label>Candidate trials <input id="tune-trials" type="number" min="1" max="1000" step="1" value="20"></label>
+          <label>Inner folds <input id="tune-folds" type="number" min="2" max="20" step="1" value="3"></label>
+          <label>Search seed <input id="tune-seed" type="number" min="0" max="4294967295" step="1" value="0"></label>
+          <label>Selection metric <select id="tune-metric"><option value="auto">Task default (log loss / RMSE)</option><option value="log_loss">Log loss (classification)</option><option value="rmse">RMSE (regression)</option></select></label>
+          <label>Cooperative deadline (seconds, 0 = off) <input id="tune-timeout-s" type="number" min="0" step="1" value="0"></label>
+        </div>
+        <p class="hint" id="tuning-cost">Equal trials, not equal compute: 20 trials × 3 inner folds plus refit means 61 fits per tree per outer split. Only outer-training rows are used for selection. The outer worker timeout is authoritative; this optional deadline cannot interrupt a running fit.</p>
+        <p class="hint">Only HistGB, LightGBM and CatBoost are searched. Foundation recipes remain defaults or explicitly fine-tuned as recorded by their adapter; tuning trees does not grant model usage rights. Each browser job has its own output root.</p>
+      </div>
+    </fieldset>
+    <p class="hint">Runs use one worker and model seed 0. Smoke uses at most 128 training and 32 test rows, with no swap approval. CUDA runs exclude incompatible methods rather than running them on CPU.</p>
+    <details>
+      <summary>Swap acceptance policy (full runs)</summary>
+      <p>These are the default limits Quibble uses, not universally safe acceptance criteria. Review them for your application. Custom JSON overrides only the keys you supply. Smoke runs do not evaluate a swap policy.</p>
+      <fieldset id="threshold-controls" disabled>
+        <legend>Configure swap thresholds</legend>
+        <label>Policy <select id="threshold-mode"><option value="defaults">Packaged defaults</option><option value="custom">Custom policy</option></select></label>
+        <label for="thresholds">Threshold JSON</label>
+        <textarea id="thresholds" rows="15" spellcheck="false" readonly></textarea>
+        <label>Import custom JSON <input id="threshold-file" type="file" accept=".json,application/json" disabled></label>
+        <div class="actions">
+          <button id="reset-thresholds" class="secondary">Reset to defaults</button>
+          <button id="download-thresholds" class="secondary">Download effective policy</button>
+        </div>
+      </fieldset>
+      <p id="threshold-status" class="hint" role="status" aria-live="polite"></p>
+      <details><summary>Effective limits (defaults plus overrides)</summary><pre id="effective-thresholds"></pre></details>
+      <p class="hint">The effective policy is saved with each full experiment and shown in its report. Download a copy to reuse with the CLI or import for a later run. <a href="/docs/swap.md" target="_blank" rel="noopener noreferrer">Threshold meanings and units</a>.</p>
+    </details>
+    <details>
+      <summary>What Full does, and what the results establish</summary>
+      <p>Each selected method fits on training rows and predicts separate held-out test rows. Holdout uses 70% for training and 30% for testing. Three-fold evaluation uses two thirds to train and one third to test, with three fresh fits; two repeats uses six fits per method. Classification preserves class proportions when feasible. Methods share the same splits for paired comparisons.</p>
+      <p>Preprocessing is learned on training rows. Tree methods train on that split; pretrained methods prepare or condition on those examples rather than retraining their foundation weights from scratch. Full removes smoke row caps, but method-specific limits still apply and refusals are reported.</p>
+      <p>The pipeline saves held-out predictions, computes quality, timing, disagreement and slice results, and runs configured swap checks when comparable results exist. Each new browser experiment uses its own output directory. Defaults do not search settings; the opt-in tuned tree tier searches only within outer-training rows. Neither tier is a final deployment fit.</p>
+      <p>Results measure behavior under this dataset, split scheme, settings, and hardware. They do not prove universal superiority, deployment readiness, causal validity, or absence of pretraining exposure. Repeated folds reuse the same table; independently generated tables and representative real data are separate checks. Do not repeatedly tune against the final test outcomes.</p>
+    </details>
+  </section>
+  <section id="start-path" hidden>
+    <div class="step">03 / START AND MONITOR</div>
+    <h3>Review the exact request before starting.</h3>
+    <pre id="start-summary"></pre>
+    <label class="check"><input id="full-confirmed" type="checkbox"> For a full run, I approve the selected methods, possible weight downloads, and potentially long execution. There is no web cancellation control.</label>
+    <label class="check" id="tuning-approval" hidden><input id="tuning-confirmed" type="checkbox"> I approve this exact training-only tree search, trial/fold budget, seed, metric and optional cooperative deadline. Equal trials do not mean equal compute. This approval does not enable model downloads.</label>
+    <p class="notice">Smoke is a bounded setup check, not swap approval. Full runs evaluate the saved policy, not production suitability. Starting is always an explicit action.</p>
+    <p class="hint">You may close this browser tab while an experiment runs. Keep the Quibble server terminal running. Return to this address and choose your dataset and experiment ID under Current and previous experiments, or bookmark the experiment link below.</p>
+  </section>
+  <section id="results-path" aria-labelledby="results-heading" hidden>
+    <div class="step">SAVED EVIDENCE</div>
+    <h2 id="results-heading">Read the result, including what did not run.</h2>
+    <label>Current and previous experiments <select id="jobs"><option value="">Select an experiment to view its report</option></select></label>
+    <p id="job-status"></p>
+    <details id="job-policy" hidden><summary>Saved swap acceptance policy</summary><p id="job-policy-source"></p><pre id="job-thresholds"></pre><button id="download-job-thresholds" class="secondary">Download saved policy</button></details>
+    <p id="job-return"></p>
+    <details id="execution-log"><summary>Execution log</summary><pre id="log" tabindex="-1">Choose an experiment.</pre></details>
+    <div class="actions"><button id="refresh" class="secondary">Refresh</button><button id="download-report" class="secondary" disabled>Download Markdown report</button><button id="print-report" class="secondary">Print complete report</button><a href="#page=verify">Verify saved evidence</a></div>
+    <p class="hint">Reports use sanitized Markdown formatting; embedded HTML and scripts are disabled. Original evidence and local artifact links remain available in the downloaded Markdown and results directory.</p>
+    <nav id="report-sections" aria-label="Complete report sections"></nav>
+    <article id="report" class="report" aria-label="Experiment report"></article>
+  </section>
+  <div id="workflow-actions-bottom" class="workflow-action-bar bottom-actions" hidden>
+    <div class="actions"><button id="workflow-back-bottom" class="secondary">Back</button><button id="run" disabled>Continue</button></div>
+    <p id="workflow-reason-bottom" class="hint"></p>
+  </div>
+</main>
+</div>
+<footer>Localhost only. Not a hosted or multi-user service. Before deploying elsewhere, add authentication, isolation, quotas, and an appropriate data-handling review.</footer>
+</body>
+</html>

@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble.backends import BACKENDS, KumoTabular, TabFM
-from quibble.config import Config
-from quibble.run import run_one, stem, sweep
+from quibble_ml.backends import BACKENDS, KumoTabular, Refused, TabFM, TabPFN
+from quibble_ml.config import Config
+from quibble_ml.run import run_one, stem, sweep
 
 
 @pytest.fixture
@@ -44,6 +44,42 @@ def training_data(task):
     y = pd.Series([0, 1, 0, 1] if task == "classification" else [1., 2., 3., 4.],
                   index=X.index)
     return X, y
+
+
+@pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_tabpfn_constructor_and_prediction_contract(monkeypatch, task, device):
+    estimator = Mock()
+    classifier, regressor = Mock(return_value=estimator), Mock(return_value=estimator)
+    monkeypatch.setitem(sys.modules, "tabpfn", SimpleNamespace(
+        TabPFNClassifier=classifier, TabPFNRegressor=regressor))
+    cfg = SimpleNamespace(tabpfn_max_rows=100, preprocess="native")
+    X, y = training_data(task)
+    backend = TabPFN()
+    backend.fit(X, y, task, 7, cfg, device)
+    factory = classifier if task == "classification" else regressor
+    factory.assert_called_once_with(device=device, random_state=7)
+    fitted_X, fitted_y = estimator.fit.call_args.args
+    pd.testing.assert_series_equal(fitted_y, y)
+    assert not isinstance(fitted_X.c.dtype, pd.CategoricalDtype)
+    expected = np.array([[0.2, 0.8]]) if task == "classification" else np.array([3.5])
+    method = estimator.predict_proba if task == "classification" else estimator.predict
+    method.return_value = expected
+    np.testing.assert_array_equal(
+        backend.predict(pd.DataFrame({"n": [5.], "c": ["unseen"]})), expected)
+    assert pd.isna(method.call_args.args[0].c.iloc[0])
+    assert backend.info == {"preprocess_effective": "ordinal", "device_effective": device}
+
+
+@pytest.mark.parametrize("limit", ["rows", "features", "classes"])
+def test_tabpfn_limits_refuse_before_importing_model(monkeypatch, limit):
+    monkeypatch.setitem(sys.modules, "tabpfn", None)
+    X = pd.DataFrame(np.ones((11, 501 if limit == "features" else 1)))
+    y = pd.Series(range(11) if limit == "classes" else [0, 1] * 5 + [0])
+    cfg = SimpleNamespace(tabpfn_max_rows=10 if limit == "rows" else 100)
+    with pytest.raises(Refused, match={"rows": "train rows", "features": "features",
+                                     "classes": "classes"}[limit]):
+        TabPFN().fit(X, y, "classification", 0, cfg, "cpu")
 
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
@@ -219,7 +255,7 @@ def test_kumo_fit_error_is_recorded_and_cache_cleared(packages, monkeypatch, tmp
     ("kumo_tabular", "QUIBBLE_KUMO_N_ESTIMATORS", "8"),
     ("kumo_tabular", "QUIBBLE_KUMO_SIZE", "large"),
 ])
-def test_changed_foundation_settings_warn_before_reusing_results(
+def test_changed_foundation_settings_require_separate_output(
         packages, monkeypatch, tmp_path, capsys, backend, key, value):
     monkeypatch.setenv("QUIBBLE_OUT_DIR", str(tmp_path))
     packages.estimator.predict_proba.side_effect = lambda X: np.full((len(X), 3), 1 / 3)
@@ -228,16 +264,14 @@ def test_changed_foundation_settings_warn_before_reusing_results(
     run_one(backend, "wine", 0, Config.from_env())
     capsys.readouterr()
     monkeypatch.setenv(key, value)
-    sweep([backend], ["wine"], Config.from_env(), False)
-    output = capsys.readouterr().out
-    assert "0 to run, 1 already done" in output and "different settings" in output
-    assert key.removeprefix("QUIBBLE_").lower() in output
+    with pytest.raises(ValueError, match="Recipe mismatch"):
+        sweep([backend], ["wine"], Config.from_env(), False)
 
 
 def test_foundation_results_work_with_analysis_swap_and_report(packages, monkeypatch, tmp_path):
-    from quibble.analyze import analyse
-    from quibble.report import build
-    from quibble.swap import evaluate
+    from quibble_ml.analyze import analyse
+    from quibble_ml.report import build
+    from quibble_ml.swap import evaluate
     monkeypatch.setenv("QUIBBLE_OUT_DIR", str(tmp_path))
     monkeypatch.setenv("QUIBBLE_CV", "2x1")
     packages.estimator.predict_proba.side_effect = lambda X: np.full((len(X), 3), 1 / 3)
@@ -259,7 +293,7 @@ def test_foundation_results_work_with_analysis_swap_and_report(packages, monkeyp
 
 def test_new_backends_are_registered_and_scheduled_serially_on_cuda(monkeypatch, tmp_path):
     from dataclasses import replace
-    from quibble import run
+    from quibble_ml import run
     assert BACKENDS["tabfm"] is TabFM and BACKENDS["kumo_tabular"] is KumoTabular
     cfg = replace(Config.from_env(), device="cuda", device_requested="cuda",
                   jobs=2, out_dir=str(tmp_path))
@@ -271,7 +305,7 @@ def test_new_backends_are_registered_and_scheduled_serially_on_cuda(monkeypatch,
         import subprocess
         return subprocess.CompletedProcess(cmd, 0)
 
-    monkeypatch.setattr(run.subprocess, "run", child)
+    monkeypatch.setattr(run, "_worker_process", child)
     sweep(["tabfm", "kumo_tabular"], ["wine"], cfg, False)
     assert len(calls) == 2
     assert [cmd[4] for cmd, _ in calls] == ["tabfm", "kumo_tabular"]

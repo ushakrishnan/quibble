@@ -5,7 +5,10 @@ description: Statistical, platform, measurement, and validation boundaries.
 
 ## Limitations
 
-The following boundaries determine which conclusions the current evaluation supports.
+Passing a practice exam does not prove that every future exam will go well.
+Likewise, a Quibble report describes its chosen data, recipes, machine and
+checks. These boundaries determine which conclusions it supports and where
+you still need independent evidence.
 
 ## Scope
 - Tabular classification and regression with **one target column**. No multi-label, ranking, time
@@ -14,15 +17,17 @@ The following boundaries determine which conclusions the current evaluation supp
   CSV/Parquet folders. Local inputs need explicit target/task metadata; see
   [Testing your own data](testing-your-data.md). Local data can declare a group or time column for
   group and temporal splits; OpenML and built-in sets use random splits. No Excel,
-  unlabeled-prediction, streaming, relational or multi-table, or separate train/test-file interface
-  is implemented.
+  unlabeled-prediction, streaming or arbitrary separate train/test-file interface
+  is implemented. A separate bounded relational manifest supports point-in-time
+  multi-table evaluation; it is not an unrestricted SQL join engine.
 - Whole datasets are held in memory.
 - The [synthetic workbench](experiment-workbench.md) implements bounded independent-row
   generation and optional provider-configured specification drafting. It does not simulate arbitrary
   business rules, correlated features, time/group structure, or validate domain realism.
   Externally generated tables can also use the local-data interface.
-- Backends use their configured presets/defaults; quibble does not tune hyperparameters, so a comparison reflects
-  out-of-the-box behaviour.
+- Default campaigns use documented adapter recipes. The opt-in tuned tier searches
+  tree parameters inside training-only folds with a fixed budget. It is not an
+  unrestricted AutoML service or a promise to find the best configuration.
 - No hosted-service prediction backend. The optional configured planner sends explicitly
   consented scenario text for specification drafting, not dataset rows for evaluation.
 - The browser workbench is localhost-only, single-user, and not a secure deployment
@@ -37,21 +42,26 @@ The following boundaries determine which conclusions the current evaluation supp
 - The corrected interval uses Nadeau-Bengio covariance assumptions, including exchangeable
   splits, which temporal forward-chaining folds are not. Row bootstrap does not model serial
   dependence. The combined verdict is not calibrated for false-PASS or false-FAIL rates.
-- Slices cover only missingness, rare categories and three numeric features; no interaction slices.
+- Default slices cover missingness, rare categories and three numeric features.
   They are chosen using the target and ranked by spread, so they are exploratory. `slices.csv` has no
   intervals. Swap bootstraps the maximum over fixed selected masks, counts test-set noise only,
   and does not repeat discovery. Family-wise coverage has not been established.
-- Multiclass calibration is top-label only; there is no per-class reliability analysis. The swap ECE
+- Optional bounded depth-two interaction explanations are exploratory, including
+  with disjoint discovery/evaluation rows because the predictors share training.
+  They do not enter automatic swap thresholds or establish causal explanations.
+- Multiclass calibration includes top-label and descriptive one-vs-rest per-class
+  reliability. Rare/absent classes and empty bins are explicit; no classwise
+  confidence bounds or new swap thresholds are claimed. The top-label swap ECE
   check has an interval, but ECE depends on its 10 equal-width bins.
 - Disagreement thresholds (regression gap, confidence, rare category, margin) are configurable
   defaults, not tuned. The reseed noise floor needs 2 or more model seeds; deterministic backends
   show zero seed noise even though retraining on different data would change their predictions.
   Noise-adjusted disagreement retains the raw rate but does not propagate uncertainty in the
   estimated noise floor.
-- The [packaged swap defaults](../quibble/swap_thresholds.json) need review against what a swap
+- The [packaged swap defaults](../quibble_ml/swap_thresholds.json) need review against what a swap
   really costs you; they are not universally safe acceptance criteria. Verdicts
-  use default model settings; quibble does not tune hyperparameters, so a swap verdict says nothing
-  about a tuned candidate.
+  apply to the saved recipes, including explicit tuned campaigns. A pass at one
+  recipe or budget says nothing about an unevaluated recipe.
 - Data flags are heuristics: a single-feature check, ID-like columns, duplicate rows and column
   names that look like dates. They do not detect leakage through combinations of features or
   through the way the data was collected.
@@ -84,11 +94,17 @@ The following boundaries determine which conclusions the current evaluation supp
   AutoGluon, but not CatBoost or other non-Torch allocations).
 - `fit_s` excludes pretrained-weight loading, which is `load_s`; `fit_total_s` is both. Weight loading
   time is measured where the adapter builds the model, so lazily loaded weights can still land in `fit_s`.
+- Mitra-v2 regression loads weights, adapts and predicts inside one batch call.
+  Its inclusive cost is recorded, not presented as cheap pure inference.
+  Unexposed stage splits, completed step counts and isolated single-row latency
+  stay unavailable. Swap cannot PASS an unmeasurable adaptation-latency budget.
+  Search/refit timings overlap total fit time and must not be added again;
+  relational feature-construction costs are shared and reported separately.
 - AutoGluon's seed is not controlled (`seed_controlled: false`) and its time budget dominates `fit_s`.
 - HistGB uses random validation splits above about 10,000 training rows, so its seed matters there
   even though it does not on small data.
 - Finished runs are identified by file name. Changing settings without changing `--out` reuses old
-  results with a warning (they are skipped), and `quibble benchmark` then exits non-zero. The check
+  results with a warning (they are skipped), and `quibble-ml benchmark` then exits non-zero. The check
   compares device, preprocessing, CV scheme, run type, model-specific settings (TabFM, Kumo,
   AutoGluon preset and time limit, TabPFN row limit), latency sample size, the dataset fingerprint
   and the installed versions of numpy, pandas and the backend's library. Settings it does not
@@ -97,8 +113,9 @@ The following boundaries determine which conclusions the current evaluation supp
   exist. Detection is not automatic invalidation or a new evaluation under the requested settings.
 - Error results count as finished. Rerun only the failed cells with `--retry-failed`; refusals are
   deterministic and are kept.
-- Local data/manifest fingerprints prevent changed inputs from being analyzed against old
-  predictions. Use a new output root for changed tables or column rules.
+- Local data/manifest and OpenML identity/content fingerprints prevent changed
+  inputs from being analyzed against old predictions. Use a new output root for
+  changed tables, column rules or legacy OpenML records without fingerprints.
 - Mixed CPU/GPU reports are explicitly labeled. AutoGluon's recorded device denotes its
   historical resource budget, not proof that every fitted component used GPU.
   New CUDA sweeps exclude CPU-only adapters and AutoGluon rather than mix model devices.
@@ -110,8 +127,21 @@ The following boundaries determine which conclusions the current evaluation supp
 
 ## Not yet verified on real hardware or services
 - TabPFN end to end. Its row/feature/class refusal limits are harness policy, not validated
-  maximum capabilities of the installed library. `quibble doctor` labels it experimental.
-- Comprehensive validation of the OpenML registry and its download paths.
+  maximum capabilities of the installed library. `quibble-ml doctor` labels it experimental.
+- TabICLv2 beyond its small real Wine classification and diabetes regression
+  holdouts on CPU and CUDA. These establish working pinned inference, not general
+  quality, maximum capacity or other-accelerator support. New checkpoint downloads
+  remain disabled unless explicitly enabled.
+- Mitra-v2 beyond its small real CUDA Wine/diabetes holdouts. Classification is
+  zero-shot; distributional regression performs prediction-time fine-tuning.
+  Python 3.11-3.13 on Windows/Linux with CUDA is the supported adapter scope;
+  the local live check used Windows/Python 3.13.4. CPU/macOS, large data, general
+  mixed-type coverage and fully controlled reseeding remain unverified.
+- All fourteen OpenML entries loaded and reloaded offline on Windows on
+  2026-10-30. Only `credit-g` and `abalone` received full HistGB/Weak holdout
+  comparisons in that check; other model/dataset combinations, platforms and
+  prediction-time suitability remain unverified. See the
+  [verification matrix and task caveats](datasets.md#verification-on-2026-10-30).
 - TabPFN on CUDA, CatBoost GPU regression/large-data coverage, and historical AutoGluon
   GPU-budget behavior. CatBoost has passed a small local CUDA classification smoke;
   new GPU-only runs exclude AutoGluon.
@@ -123,7 +153,7 @@ The following boundaries determine which conclusions the current evaluation supp
 
 ## Known rough edges
 - The OpenML registry is hand-written.
-- `quibble compare` looks at a single split id; use `analyze` for pooled results.
+- `quibble-ml compare` looks at a single split id; use `analyze` for pooled results.
 - The bootstrap's memory grows with `QUIBBLE_BOOT x rows`.
 
 See the [project plan](project-plan.md) for what is intended next.

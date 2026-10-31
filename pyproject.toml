@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "quibble-ml"  # PyPI name; the import and the command are both "quibble"
+name = "quibble-ml"  # Import: quibble_ml; command: quibble-ml
 version = "0.0.1"
 description = "Before you swap a tabular model, see exactly what changes: paired quality, row-level disagreement, cost and a PASS/FAIL/INCONCLUSIVE verdict"
 readme = "README.md"
@@ -14,30 +14,55 @@ dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10", "scikit-learn>=1.4"
 
 [project.optional-dependencies]
 data = ["pyarrow>=14"]
-report = ["matplotlib"]
-autogluon = ["autogluon.tabular"]
-tabpfn = ["tabpfn"]
-tabfm = ["tabfm[pytorch]>=1.0.1"]
-kumo = ["structured-data-models>=0.2.1"]
-# dev installs everything the test suite imports, so `pip install -e ".[dev]"` is a complete test setup
-dev = ["pytest", "pyarrow>=14", "matplotlib", "markdown-it-py>=3", "bleach>=6", "openai>=2.0",
-       "azure-identity>=1.19"]
-web = ["openai>=2.0", "azure-identity>=1.19", "matplotlib", "markdown-it-py>=3", "bleach>=6"]
+report = ["matplotlib>=3.8"]
+autogluon = ["autogluon.tabular>=1.1; python_version < '3.14'",
+            "fastai>=2.8.12; python_version < '3.14'",
+            "plum-dispatch==2.9.0; python_version < '3.14'"]
+tabpfn = ["tabpfn==9.2.0"]
+tabicl = ["tabicl==2.2.0", "torch==2.11.0"]
+mitra-v2 = ["autogluon.tabular==1.6.3; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "tabarena==0.1.0; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "mitra-finetune==0.3.0; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "torch==2.11.0; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "huggingface-hub==1.33.0; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "loguru==0.7.3; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "einx==0.4.3; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "omegaconf==2.4.0; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "transformers==5.22.1; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'",
+            "einops==0.8.2; python_version >= '3.11' and python_version < '3.14' and platform_system != 'Darwin'"]
+tabfm = ["tabfm[pytorch]>=1.0.1; python_version >= '3.11'"]
+kumo = ["structured-data-models>=0.2.1; python_version >= '3.11'"]
+web = ["openai>=2.0", "azure-identity>=1.19", "matplotlib>=3.8", "markdown-it-py>=3", "bleach>=6"]
 site = ["markdown-it-py>=3", "bleach>=6"]
+windows-cuda = ["torch==2.11.0+cu128; sys_platform == 'win32'",
+                "torchvision==0.26.0+cu128; sys_platform == 'win32'"]
+
+[dependency-groups]
+dev = ["pytest>=7", "tomli>=2; python_version < '3.11'"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+mitra-finetune = { git = "https://huggingface.co/autogluon/mitra-finetune", rev = "b4701e8148dc33b00ed15d7086ff59816957cde4" }
+torch = [{ index = "pytorch-cu128", extra = "windows-cuda", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu128", extra = "windows-cuda", marker = "sys_platform == 'win32'" }]
 
 [project.scripts]
-quibble = "quibble.cli:main"
+quibble-ml = "quibble_ml.cli:main"
 
 [tool.setuptools]
-packages = ["quibble", "quibble.docs"]
+packages = ["quibble_ml", "quibble_ml.docs"]
 
 [tool.setuptools.package-dir]
-"quibble.docs" = "docs"
+"quibble_ml.docs" = "docs"
 
 [tool.setuptools.package-data]
-quibble = ["swap_thresholds.json", "web_assets/*.html", "web_assets/*.js", "web_assets/*.css",
+quibble_ml = ["swap_thresholds.json", "web_assets/*.html", "web_assets/*.js", "web_assets/*.css",
            "sample_data/*/*.csv", "sample_data/*/*.json"]
-"quibble.docs" = ["*.md", "blog/*.md", "assets/blog/*.svg", "assets/blog/*.png",
+"quibble_ml.docs" = ["*.md", "blog/*.md", "assets/blog/*.svg", "assets/blog/*.png",
                  "assets/blog/*.csv", "assets/blog/*.json", "assets/screenshots/*.png"]
 
 [tool.pytest.ini_options]

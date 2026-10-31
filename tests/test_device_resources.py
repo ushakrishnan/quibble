@@ -5,10 +5,10 @@ from dataclasses import replace
 
 import pytest
 
-from quibble import config, run
-from quibble.backends import BACKENDS, HistGB, select_backends
-from quibble.config import Config
-from quibble.report import device_summary
+from quibble_ml import config, run
+from quibble_ml.backends import BACKENDS, HistGB, select_backends
+from quibble_ml.config import Config
+from quibble_ml.report import device_summary
 
 
 @pytest.mark.parametrize(("requested", "available", "expected"), [
@@ -44,7 +44,7 @@ def test_backend_filtering_preserves_model_identity(device):
     if device == "cpu":
         assert included == names and excluded == {}
     else:
-        assert included == ["catboost", "tabpfn", "tabfm", "kumo_tabular"]
+        assert included == ["catboost", "tabpfn", "tabicl_v2", "mitra_v2", "tabfm", "kumo_tabular"]
         assert set(excluded) == {"histgb", "weak", "lightgbm", "autogluon", "dummy", "linear"}
         assert all(excluded.values())
 
@@ -56,7 +56,7 @@ def test_cuda_sweep_excludes_cpu_and_mixed_models_before_workers(monkeypatch, tm
         calls.append((cmd, kwargs["env"]))
         return subprocess.CompletedProcess(cmd, 1)
 
-    monkeypatch.setattr(run.subprocess, "run", worker)
+    monkeypatch.setattr(run, "_worker_process", worker)
     cfg = replace(Config.from_env(), out_dir=str(tmp_path), device_requested="auto", device="cuda")
     invocation = run.sweep(["histgb", "lightgbm", "catboost", "autogluon"], ["wine"], cfg, True)
     assert invocation["backends"] == ["catboost"]
@@ -72,14 +72,14 @@ def test_cuda_sweep_excludes_cpu_and_mixed_models_before_workers(monkeypatch, tm
 def test_all_excluded_stops_before_creating_results(monkeypatch, tmp_path):
     cfg = replace(Config.from_env(), out_dir=str(tmp_path / "new"), device="cuda")
     worker = lambda *a, **k: pytest.fail("Excluded methods must never start a worker")
-    monkeypatch.setattr(run.subprocess, "run", worker)
+    monkeypatch.setattr(run, "_worker_process", worker)
     with pytest.raises(ValueError, match="No selected methods"):
         run.sweep(["histgb", "lightgbm", "weak", "autogluon"], ["wine"], cfg, True)
     assert not (tmp_path / "new").exists()
 
 
 def test_direct_cuda_cpu_backend_is_refused_before_loading_data(monkeypatch, tmp_path):
-    monkeypatch.setattr("quibble.datasets.load", lambda *a: pytest.fail("Must refuse before loading"))
+    monkeypatch.setattr("quibble_ml.datasets.load", lambda *a: pytest.fail("Must refuse before loading"))
     cfg = replace(Config.from_env(), out_dir=str(tmp_path), device="cuda")
     run.run_one("histgb", "wine", 0, cfg)
     record = json.loads((tmp_path / "wine" / "histgb_ss0_ms0.json").read_text())
@@ -88,7 +88,7 @@ def test_direct_cuda_cpu_backend_is_refused_before_loading_data(monkeypatch, tmp
 
 
 def test_report_records_exclusions_instead_of_old_cpu_success():
-    from quibble.report import participation
+    from quibble_ml.report import participation
     invocation = dict(backends=["catboost"], requested_backends=["histgb", "catboost"],
                       excluded_backends={"histgb": "CPU-only implementation"}, datasets=["wine"])
     records = {"wine": [dict(backend="histgb", split_seed=0, model_seed=0)]}
@@ -130,7 +130,7 @@ def test_failed_workers_do_not_hide_old_success_or_stop_other_cells(monkeypatch,
             raise subprocess.TimeoutExpired(cmd, 3)
         return subprocess.CompletedProcess(cmd, 3221225495 if failure == "exit" else 0)
 
-    monkeypatch.setattr(run.subprocess, "run", worker)
+    monkeypatch.setattr(run, "_worker_process", worker)
     cfg = replace(Config.from_env(), out_dir=str(tmp_path), device_requested="auto", device="cpu")
     invocation = run.sweep(["histgb", "lightgbm"], ["wine"], cfg, True)
     assert len(calls) == 2

@@ -1,23 +1,71 @@
 ---
 title: Experiment workbench
-description: Design synthetic tables, review their assumptions, and compare prediction methods in a localhost browser.
+description: Upload labeled tables or design synthetic data, review inputs, and compare prediction methods in a localhost browser.
 ---
 
 ## Experiment workbench
 
-Describe a prediction problem, review an explicit generation recipe, preview the data,
-and run a comparison without switching between scripts.
+Upload your labeled CSV/Parquet, choose saved data, or describe a synthetic prediction
+problem. Review the inputs and run a comparison without switching between scripts.
+
+## Upload your own labeled table
+
+Choose **Upload CSV / Parquet** in the local workbench. Effective limits are shown
+before upload. Parsing and preview are local, resource-bounded operations; no
+planner, provider or prediction method is called.
+
+1. Upload UTF-8 comma-separated CSV (BOM accepted) or Parquet.
+2. Inspect the first 20 rows, suggested types and missing counts.
+3. Give the dataset a new name; choose its outcome column and classification or
+   regression. Drop identifiers/future-only fields and declare categorical predictors.
+4. Choose group/time roles when needed and validate random, grouped or temporal
+   evaluation. Structural columns are not predictors. Temporal folds do not repeat.
+5. Review the validated target summary, manifest and source fingerprint, then
+   explicitly confirm saving. Editing any role invalidates that confirmation.
+6. Configure methods, review Start and monitor, and reopen saved reports through
+   Experiment history.
+
+The source bytes are preserved. Quibble does not repair malformed rows, rename
+duplicate headers, remove missing targets or silently shorten training data.
+Sample text is shortened only for display. Cancel discards the owned stage;
+committed datasets and original files are unaffected. See
+[upload limits and provenance](testing-your-data.md#browser-upload) for details.
 
 The optional language-model connection drafts a specification, not prediction results.
 Quibble's local generation code creates the rows and outcomes. Existing prediction
 methods then train and are evaluated on held-out outcomes. This does not benchmark
 ChatGPT as a predictor.
 
+## Appearance and accessible navigation
+
+Open **System → Settings and theme** to choose independent color mode
+(System, Light, Dark), accent (Blue, Teal, Indigo, Violet, Fuchsia, Slate), and
+contrast (Standard, High). Blue is the default. The native controls and labeled
+preview do not change datasets, exact-run approvals, or saved evidence. Verdict
+words and colors remain independent of accent; preview badges are not results.
+The shared product header provides the same appearance choices on About, Docs,
+Blog, and exported static documentation.
+
+Preferences synchronize across controls and browser tabs. Cleared storage restores
+defaults; invalid preferences use validated defaults with a warning. If storage is
+blocked or full, changes still work for the current page and a visible warning
+explains that they may not be saved. System mode follows OS changes; operating-system
+forced colors and reduced motion remain supported.
+
+On desktop, **Compact navigation** toggles the labeled sidebar into an icon rail.
+Only that bounded preference is saved; temporarily opening a group is not. Focus
+or hover shows a supplementary label. Activate a group with Enter or Space, Tab to
+its links, and press Escape to close it and restore focus. The icons are original
+local SVG shapes dedicated under CC0-1.0; the notice is in the packaged HTML.
+At narrow widths, Menu opens the full labeled drawer. Tab stays inside it; Close
+menu or Escape restores focus to Menu and re-enables the background.
+
 ## Visual walkthrough
 
 These screens use the current neutral light theme and the bundled fictional
 `grocery_sample` dataset. They show a real local comparison with HistGB and LightGBM
-on shared three-fold evaluation splits, not a mockup. No planning provider, private
+on a shared holdout split, not a mockup. A single split does not establish
+across-split stability. No planning provider, private
 data, or optional model-weight download is needed for this example. Results depend
 on the dataset, configuration, and hardware, not real grocery operations.
 
@@ -33,15 +81,80 @@ The saved rows are reused unchanged.
 Choose methods, device policy, and smoke or full evaluation. Full runs require
 approval; smoke runs do not establish replacement evidence.
 
-![Current workbench configuration with HistGB, LightGBM, CPU execution, and three-fold evaluation](assets/screenshots/workbench-configure-run.png)
+![Methods and settings with HistGB, LightGBM, CPU execution, and a holdout split](assets/screenshots/workbench-configure-run.png)
 
 ### Read the evidence
 
-Compare quality and uncertainty, then inspect which predictions changed. The excerpt
-below shows paired disagreements. The complete report also includes checks, flags,
-failures, and limitations; the excerpt is not a replacement approval.
+Open the complete saved report, including execution status, requested methods and
+saved policy. Scroll through quality, disagreement, checks, failures and limitations;
+the visible excerpt is not a replacement approval.
 
-![Current workbench report with a disagreement heatmap and paired prediction counts](assets/screenshots/workbench-results.png)
+![Saved full-run report inside the sidebar workbench, with execution and policy controls](assets/screenshots/workbench-results.png)
+
+### Navigate, print and download complete evidence
+
+The report's **Complete report sections** links follow every Markdown heading,
+including unfamiliar or future sections. They scroll within the full report;
+they do not filter evidence into tabs. **Print complete report** includes all report
+sections and expands code blocks rather than clipping scrollable content.
+**Download Markdown report** preserves the original Markdown, including local
+artifact references. Failed and interrupted execution remains explicit, even
+when a partial report exists.
+
+### Verify saved evidence without retraining
+
+Open **Results → Verify saved evidence**, choose a saved experiment and select
+**Load methods and saved checks**. Choose distinct incumbent/baseline and candidate
+methods, then explicitly select **Check swap** or **Check baseline gate**.
+
+* Swap reuses the saved effective acceptance policy and existing scientific swap
+  evaluator. It does not silently substitute today's packaged defaults.
+* Baseline gate uses the saved primary metric and your nonnegative minimum gain.
+  It asks a narrower improvement question, not replacement approval.
+* Both require complete full-run evidence for all recorded methods, a matching
+  available offline source, fitted recipe provenance, aligned test rows and
+  labels, prediction artifacts and invocation coverage. Smoke, interrupted,
+  failed, excluded or incomplete evidence is refused, not converted into PASS.
+* Checks run in a separate analysis process with a 120-second limit; they do not
+  fit predictors, download model weights, call a planning provider or change
+  the original report, policy or model records. Wait for active training to finish.
+
+Each executed check is saved separately under
+`results/web/<job-id>/verifications/<check-id>.json`, including its inputs,
+coverage, policy provenance and input digest. Reopen saved checks or download
+the selected JSON. Scientific outcomes remain **PASS**, **FAIL** or
+**INCONCLUSIVE**; process errors are **ERROR**, with no scientific verdict.
+PASS is not a production-safety guarantee. The saved effective policy is supplied
+explicitly during replay, so the evaluator's policy-origin flags describe the
+replay; the artifact's `policy_provenance` describes the original selection.
+
+### Compare exactly two saved experiments
+
+Open **Results → Compare two experiments**, select two different saved jobs and
+explicitly compare. The side-by-side evidence includes recorded configuration,
+devices, method cells, metrics, coverage and policies. Compatibility checks
+source fingerprints, task, actual saved test rows/labels/splits and recipes;
+matching dataset names or fold counts alone are insufficient.
+
+This surface is **descriptive only**, even when compatibility is **MATCHED**.
+It never declares a winner, scientific equivalence or paired statistical verdict.
+Different policies, recipes, execution settings or coverage remain visible.
+Different sources or targets restrict presentation to configuration and report
+links; shared quality ranking is withheld. Missing source provenance is
+**UNKNOWN**, not approval. Supported defaults-versus-tuned tree cells additionally
+reuse the existing cross-tier pairing validator without inventing a paired verdict.
+The JSON download records the compatibility contract and caveats.
+
+### Explicit diagnostics
+
+**System → Backends and verification** shows the existing backend registry and
+verification metadata. **Collect local package diagnostics** is a separate,
+explicit action, with a timestamp and optional JSON download. Navigation and
+Home refresh do not collect diagnostics. Only Python/OS identifiers, allowlisted
+package versions and backend metadata are returned: no environment variables,
+credentials, private rows, registry keys, cache paths, GPU initialization or
+network probes. A missing optional package is unavailable, not an experiment
+failure. There are no install, credential-editing or download controls.
 
 ## Why generate a fresh dataset
 
@@ -72,7 +185,7 @@ Use the existing environment from [Getting started](getting-started.md#install):
 
 ```powershell
 & .\.venv\Scripts\Activate.ps1
-python -m quibble web --open
+python -m quibble_ml web --open
 ```
 
 Open `http://127.0.0.1:8765`. Choose another port with `--port 8876`.
@@ -121,14 +234,18 @@ tables without an account, provider call, or regeneration. Both domains have bin
 classification and regression examples, each with 1,000 rows and eight predictors.
 Saved recipes, input hashes, and explanations accompany all four tables.
 
-### One starting point, two data paths
+### One review flow, three experiment steps
 
-The top navigation has two views: **Experiment workflow** and **Past experiments**.
-Full-width navigation cards describe both entry points. The active card is marked
-**Selected** and colored; the other stays neutral. Cards stack on narrow screens.
-Only the workflow view shows its three-step progress navigation:
-**Choose data -> Configure & run -> Results**. Past experiments is not a fourth step.
-Switching back to the workflow restores its last step. Start at **Choose data**:
+Home offers Start experiment, upload, recent browser jobs and a small setup summary.
+A missing synthetic-planning provider does not prevent existing-data or upload work.
+The sidebar groups Data, Run experiment, Results, System and Help. On narrow screens,
+Menu opens a full labeled drawer with keyboard focus containment; Escape closes it
+and returns focus. Public Docs, Blog and About remain separate reading pages.
+
+Run experiment has three steps:
+**Choose data -> Methods and settings -> Start and monitor**.
+Data and Choose data share the same review controls, not separate drafts.
+Start at Choose data:
 
 - **Use existing dataset** shows ready-made and other saved datasets. Choose one,
   inspect its actual rows and assumptions, confirm review, then choose
@@ -136,15 +253,36 @@ Switching back to the workflow restores its last step. Start at **Choose data**:
 - **Design new dataset** shows the scenario and recipe editor, not the existing-data
   controls. Propose a design, preview, confirm review, then choose
   **Save and continue** to save the dataset and open experiment configuration.
+- **Upload CSV / Parquet** stages a local file, requires explicit column-role and
+  split review, then saves the unchanged source before continuing.
 
 Preview generation stays disabled after a successful preview until the recipe changes.
 An unchanged saved recipe also needs no generation: discard the variant to use its
 existing rows, or change the name or recipe to enable a new preview.
 
-The run screen shows the chosen dataset as a summary, not another dataset picker.
-Use **Change dataset** to return to the data step. Starting a run opens **Results**;
-bookmarked jobs also reopen there. **Past experiments** opens saved report selection
-without requiring a new data choice.
+Methods and settings shows the chosen dataset as a summary, not another picker.
+Use Change dataset to return to review. Next opens Start and monitor without
+training anything. The matching top and bottom action bars use the same validation
+and handlers, with visible explanations when an action is disabled.
+
+Start and monitor summarizes the request. Full requires explicit approval;
+changing data, methods, mode, device, splits or draft policy clears that approval.
+Start sends one request; uncertain responses require Refresh status, not an
+automatic retry. The global running indicator stays visible on other pages.
+Opening an older report cannot redirect monitoring to that older job or let a
+heartbeat overwrite the selected report.
+
+Experiment history lists up to 30 recent browser jobs, not the complete CLI
+archive. Saved report links and legacy `#job=...` bookmarks reopen without
+reviewing new data. Back, Forward and direct page links preserve the in-memory
+draft; reloading does not silently restore review approval. Missing jobs and
+unknown routes give explicit errors and recovery directions.
+
+Backends and verification shows existing registry metadata, not proof of package
+installation. Local diagnostics require the separate explicit collection action.
+Settings and theme includes independent mode, accent, contrast and desktop rail
+preferences. Results also provides functional saved-evidence Verify and descriptive
+two-experiment Compare pages; neither action starts training.
 
 For a new design, enter your own description and choose
 **Propose a scenario with my provider**.
@@ -196,9 +334,9 @@ from the current recipe, not another provider request. Editing the recipe hides 
 old explanation until a validated preview refreshes it. Reviewing a saved generated
 dataset also provides a collapsed explanation from its saved recipe.
 
-Repository requirements include the planning/authentication SDKs. A minimal package install
-can add them with `python -m pip install -e ".[web]"`; local generation and the local
-example do not need those SDKs.
+The `web` extra includes the planning/authentication SDKs. Select it with
+`uv sync --locked --extra web --extra data`, retaining any wanted model extras.
+Local generation and the local example do not call those SDKs.
 
 ## Configure your planning provider
 
@@ -269,13 +407,13 @@ An Azure deployment name is not necessarily the model family's name.
 Install Azure CLI if needed and sign in explicitly:
 
 ```powershell
-python -m quibble auth
-python -m quibble auth --check
-python -m quibble web --open
+python -m quibble_ml auth
+python -m quibble_ml auth --check
+python -m quibble_ml web --open
 ```
 
-For browserless/device-code login use `python -m quibble auth --device-code`.
-Alternatively, `python -m quibble web --login --open` combines explicit login and
+For browserless/device-code login use `python -m quibble_ml auth --device-code`.
+Alternatively, `python -m quibble_ml web --login --open` combines explicit login and
 startup; add `--device-code` if required. Optional tenant and subscription settings
 select the intended account context.
 
@@ -377,7 +515,7 @@ unchanged. Selecting a different dataset clears the current review.
 ## Specification and generation mathematics
 
 Version 1 accepts only known schema keys. Start from the UI or
-`python -m quibble generate --example`; unsupported keys or executable code are rejected.
+`python -m quibble_ml generate --example`; unsupported keys or executable code are rejected.
 
 | Section | Required content |
 |---|---|
@@ -448,10 +586,10 @@ Repeat comparisons across fresh generation seeds before generalizing.
 For CLI use, save a reviewed example/specification:
 
 ```powershell
-python -m quibble generate --example
+python -m quibble_ml generate --example
 # Save the JSON as reviewed-spec.json using a UTF-8 editor, then:
-python -m quibble generate --spec reviewed-spec.json
-python -m quibble datasets --verify --names grocery_sample
+python -m quibble_ml generate --spec reviewed-spec.json
+python -m quibble_ml datasets --verify --names grocery_sample
 ```
 
 Use the actual saved name. Existing [local-data commands](testing-your-data.md)
@@ -469,7 +607,7 @@ Full runs use `holdout`, `3x1`, or `3x2`, fixed model seed 0, and one fit worker
 One experiment can run at a time; each gets an isolated output directory.
 
 For full runs, expand **Swap acceptance policy (full runs)** to inspect the
-[packaged defaults](../quibble/swap_thresholds.json). These are the limits Quibble uses,
+[packaged defaults](../quibble_ml/swap_thresholds.json). These are the limits Quibble uses,
 not universally safe acceptance criteria. Choose **Custom policy** to edit JSON or import
 a local JSON file. Omitted keys retain defaults; the preview shows the merged effective limits.
 The server rejects invalid policies before training. **Reset to defaults** discards edits,

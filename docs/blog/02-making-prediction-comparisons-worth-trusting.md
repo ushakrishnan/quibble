@@ -93,7 +93,7 @@ not yet encode every library version, training setting, or environmental influen
 Unchanged filenames are insufficient, but a content hash is not a complete reproducibility
 guarantee either.
 
-The relevant implementation is in [dataset loading and validation](../../quibble/datasets.py);
+The relevant implementation is in [dataset loading and validation](../../quibble_ml/datasets.py);
 the [regression tests](../../tests/test_local_datasets.py) include feature-only and
 manifest changes.
 
@@ -227,14 +227,14 @@ Here is the compact classification path. The
 [complete local-data guide](../testing-your-data.md) covers setup, file requirements,
 a runnable synthetic example, missing values, Parquet, regression, outputs, and privacy.
 
-For interactive use, `python -m quibble web --open` starts the localhost workbench.
+For interactive use, `python -m quibble_ml web --open` starts the localhost workbench.
 Choose an existing dataset, inspect its saved rows and metadata, and use it unchanged.
 Or review a generation specification and save a new named variant.
 **Save and continue** opens configuration with the saved variant; the adjacent
 **Discard changes and continue** uses the unchanged original. Neither starts a run.
 An unchanged saved recipe needs no generation, and a completed preview stays disabled
-until the recipe changes. The workflow is **Choose data -> Configure & run -> Results**,
-with **Past experiments** separate from those steps. The browser also adds
+until the recipe changes. The workflow is **Choose data -> Methods and settings -> Start and monitor**,
+with **Experiment history** separate from those steps. The browser also adds
 field/method help, a running indicator, sanitized report formatting, and an experiment
 link for returning later. Closing the tab does not stop work while the server remains
 running. Completed reports persist on disk.
@@ -268,28 +268,37 @@ the declaration would be:
 
 The target is removed from features. Declared excluded columns are dropped before the
 split. For classification, labels are encoded and their column order is recorded.
-Temporal/grouped evaluation and automatic leakage detection are not implemented, so
-choosing a suitable table and evaluation design remains the user's responsibility.
+At the article's original checkpoint, temporal/grouped evaluation and automatic
+leakage detection were not implemented.
+
+> [!NOTE]
+> Implementation follow-up, 2026-10-30: local group and temporal splits,
+> group-clustered intervals and heuristic data flags now exist. A bounded
+> point-in-time relational path also exists. General automatic leakage
+> detection remains unimplemented; choosing a suitable table and evaluation
+> design is still your responsibility. Use the current
+> [data guide](../testing-your-data.md) rather than the historical manifest above
+> for these options.
 
 After following the [environment setup](../getting-started.md#install),
 validate and start with a bounded tree-model smoke check:
 
 ```powershell
-python -m quibble datasets --verify --names payments
-python -m quibble benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --smoke --out results_payments
+python -m quibble_ml datasets --verify --names payments
+python -m quibble_ml benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --smoke --out results_payments
 ```
 
 Read the smoke interpretation, then run the full training splits:
 
 ```powershell
-python -m quibble benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --cv 3x2 --model-seeds 0 --out results_payments
+python -m quibble_ml benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --cv 3x2 --model-seeds 0 --out results_payments
 ```
 
 The full report is `results_payments/report/report.md`; smoke outputs stay under their
 own `smoke/<id>` roots.
 
 For replacement limits, start from the
-[packaged defaults](../../quibble/swap_thresholds.json), review every applicable default,
+[packaged defaults](../../quibble_ml/swap_thresholds.json), review every applicable default,
 and set values justified by the application. Writing the following illustration to
 `limits.json` would override only the listed keys:
 
@@ -306,7 +315,7 @@ Those values are illustrative policy inputs, not recommended universal tolerance
 Other limits remain at their defaults.
 
 ```powershell
-python -m quibble swap --dataset payments --incumbent histgb --candidate lightgbm --out results_payments --thresholds limits.json
+python -m quibble_ml swap --dataset payments --incumbent histgb --candidate lightgbm --out results_payments --thresholds limits.json
 ```
 
 The important output is the explanation of which limits passed, failed, or remained

@@ -8,9 +8,9 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from quibble.config import Config
-from quibble.history import snapshot
-from quibble.run import run_one, stem, sweep
+from quibble_ml.config import Config
+from quibble_ml.history import snapshot
+from quibble_ml.run import run_one, stem, sweep
 
 
 def saved_outputs(out, version=1, report_dir=None):
@@ -111,7 +111,7 @@ def test_raw_snapshot_does_not_attach_an_older_report(tmp_path):
 
 
 def test_archive_failure_stops_before_changing_originals(monkeypatch, tmp_path):
-    from quibble import history
+    from quibble_ml import history
     saved_outputs(tmp_path)
     original = (tmp_path / "wine" / "histgb_ss0_ms0.json").read_bytes()
 
@@ -150,14 +150,19 @@ def test_force_preserves_previous_run_and_cached_repeat_does_not_retrain(monkeyp
 
 
 def test_timeout_has_provenance_and_preserves_old_results(monkeypatch, tmp_path):
-    from quibble import run
+    from quibble_ml import run
     saved_outputs(tmp_path)
     cfg = replace(Config.from_env(), out_dir=str(tmp_path), model_seeds=(0,), timeout_s=1)
+    from quibble_ml.provenance import recipe_snapshot
+    path = tmp_path / "wine" / "histgb_ss0_ms0.json"
+    previous = json.loads(path.read_text())
+    previous["recipe"] = recipe_snapshot("histgb", cfg, 0)
+    path.write_text(json.dumps(previous))
 
     def timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(args[0], 1)
 
-    monkeypatch.setattr(run.subprocess, "run", timeout)
+    monkeypatch.setattr(run, "_worker_process", timeout)
     sweep(["histgb"], ["wine"], cfg, True)
     record = json.loads((tmp_path / "wine" / "histgb_ss0_ms0.json").read_text())
     assert record["error"] == "timeout after 1s"

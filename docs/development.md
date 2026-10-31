@@ -5,14 +5,19 @@ description: Local environment setup, tests, and Quibble implementation conventi
 
 ## Development
 
+Quibble's core contract is a fair, inspectable comparison, not a shared method
+name. When adding a model or data path, preserve held-out answers, class-column
+order, source identity, real costs and explicit failures. A mocked adapter test
+does not replace a real fit.
+
 ## Layout
 
 ```text
-quibble/                 the package
+quibble_ml/                 the package
   benchmark.py           device-aware presets and isolated smoke checks
   cache.py               project-local download cache configuration
   config.py              settings: .env, environment, validation, device resolution
-  env_info.py            hardware/software capture; `quibble doctor`
+  env_info.py            hardware/software capture; `quibble-ml doctor`
   datasets.py            registry, loading, splitting (holdout and repeated CV), metadata
   backends.py            Backend classes and the BACKENDS registry
   run.py                 one-run executor, sweep scheduler, saved artefacts
@@ -28,7 +33,7 @@ quibble/                 the package
   web.py                 loopback HTTP server, review gates, persistent benchmark jobs
   web_assets/            browser workflow, product header, and independent About page
   sample_data/            four bundled synthetic datasets, manifests, and recipes
-  cli.py                 the `quibble` command and `demo`
+  cli.py                 the `quibble-ml` command and `demo`
 tests/                   pytest suite
 docs/                    this documentation
 .github/workflows/ci.yml continuous integration
@@ -39,7 +44,7 @@ docs/                    this documentation
 ```text
 config (.env/env/flags)
         |
-   quibble run --sweep --> [process per run] --> run record .json + predictions .npy
+   quibble-ml run --sweep --> [process per run] --> run record .json + predictions .npy
                                                           |
                                        pool.py (align backends on common splits)
                                           |                       |
@@ -56,13 +61,13 @@ thresholds without another training cost, but still uses compute and memory.
 ## Setup
 
 Use the [local environment setup](getting-started.md#install).
-The unified requirements already include pytest and matplotlib.
+The default `dev` group includes pytest; the web/data extras provide the other
+dependencies used by tests. Optional model adapters are mocked in routine CI.
 
 ```powershell
 & .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pip install --no-deps -e .
-python -m pip check
+uv sync --locked --extra web --extra data
+uv pip check
 python -m pytest
 ```
 
@@ -93,11 +98,12 @@ Add tests with new behavior and regression tests with fixes. For example, metric
 tests verify that quality degradation is positive when a candidate is worse.
 
 ## Continuous integration
-`.github/workflows/ci.yml` defines `pytest`, `quibble demo --cv 3x1` and two swap exit-code checks
+`.github/workflows/ci.yml` defines `pytest`, `quibble-ml demo --cv 3x1` and two swap exit-code checks
 on Python 3.10 to 3.13 (Linux) and Python 3.13 (Windows). Remote execution has not been verified; the
-same steps passed locally on Linux with Python 3.12. CI installs `.[dev]`, which contains everything the
-tests import (pyarrow, openai, azure-identity, matplotlib, markdown-it-py, bleach), but not the heavy
-model libraries; full model-library and Windows/CUDA setup validation are separate.
+same steps passed locally on Linux with Python 3.12 before the uv migration.
+CI now uses `uv sync --locked --extra web --extra data`, which installs the default
+dev group and everything tests import, but not heavy model libraries.
+Full model-library and Windows/CUDA validation are separate.
 
 ## Extending
 **New backend:** see [Backends](backends.md#adding-a-backend).
@@ -124,6 +130,62 @@ dataset loading, without fitting models during report generation.
 - Results must remain readable by later versions: add fields, do not rename or repurpose them.
 - Label point estimates, single-machine timings, and uncorrected exploratory maxima explicitly.
 
+## Workbench navigation checks
+
+The existing Node-backed pytest tests exercise route parsing, review/approval
+guards, shared actions, single-flight monitoring and stale asynchronous responses.
+They require Node; skipped browser-asset tests do not establish working navigation.
+
+```powershell
+python -m pytest tests\test_web_assets.py tests\test_web.py tests\test_web_palette.py
+```
+
+Also exercise the actual browser against an unused localhost port with isolated
+`QUIBBLE_OUT_DIR`, `QUIBBLE_DATA_DIR` and `QUIBBLE_CACHE_DIR` locations. Check a
+reviewed bundled dataset, local upload, changed approvals, Back/Forward, legacy
+job bookmarks and an old report while a new bounded CPU experiment runs.
+Verify keyboard drawer containment/restoration and no page-wide overflow at
+320, 375, 768 and 1280 CSS pixels. Do not send provider requests or download
+foundation checkpoints as a side effect of navigation testing.
+
+The [workbench guide](experiment-workbench.md#one-review-flow-three-experiment-steps)
+describes the shipped routes and scientific safeguards.
+
+### Appearance regression checks
+
+`theme.js` validates independent `quibble-theme`, `quibble-accent`,
+`quibble-contrast`, and `quibble-rail` preferences before the stylesheet loads.
+Use native labeled selects in Settings and the shared header, not custom radio
+widgets. Keep accent overrides limited to the seven primary/focus tokens;
+semantic verdict tokens must not vary with accent. The six inline navigation
+icons are original CC0-1.0 artwork; preserve their HTML notice and `currentColor`
+styling. Do not introduce remote appearance assets.
+
+The palette suite resolves base, accent, and contrast overrides across 24
+combinations. It checks ordinary, muted, selected, link, and button text at
+4.5:1, and boundaries/focus at 3:1. Focus uses a surface-colored separator plus
+an accent outline so it remains distinguishable from a primary button.
+Test OS forced colors separately using system colors rather than RGB ratios.
+
+For a no-training UI check, use the existing environment without syncing it:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE = "1"
+# Create a unique, short temporary directory owned by this validation run first.
+& .\.venv\Scripts\python.exe -B -m pytest tests\test_web_assets.py tests\test_web_palette.py tests\test_web.py tests\test_uploads.py tests\test_device_resources.py tests\test_site.py tests\test_docs.py -k "not real_generated_dataset_benchmark_and_report and not upload_review_confirm_compare_and_reopen" -p no:cacheprovider --basetemp=C:\owned-ui-check\pytest
+```
+
+In an isolated browser/server origin, check all 24 appearance combinations,
+multiple controls, OS mode changes, reload, cross-tab updates, cleared/invalid
+storage and denied reads/writes. Verify the desktop rail's focus/hover labels,
+native disclosures and Escape restoration; retain the mobile drawer's focus
+trap, inert background and focus restoration. Check 320/375/768/1280 widths,
+200% zoom (or record a 640-by-450 zoom-equivalent limitation), forced colors,
+reduced motion, and print. Check shared About/Docs/Blog and a `/quibble` static
+export without live API or external appearance requests. Do not use the user's
+server, run fits or download weights for this appearance validation. Stop only
+owned process IDs and remove only the run's owned temporary directory.
+
 ## Releasing (not done yet)
 Source repository: [ushakrishnan/quibble](https://github.com/ushakrishnan/quibble).
 Product navigation links to GitHub. Blog and Docs are also served locally.
@@ -136,7 +198,7 @@ The docs folder has a GitHub landing page (`docs/README.md`), an index, relative
 links, and self-contained installation instructions. It needs no site generator for
 GitHub browsing; the static export and Pages workflow use the same content and renderer.
 The local HTML reader provides grouped sidebar navigation, heading anchors and an
-on-page index, breadcrumbs, and sequential guide links. `DOC_NAV` in `quibble/web.py`
+on-page index, breadcrumbs, and sequential guide links. `DOC_NAV` in `quibble_ml/web.py`
 defines the reading order; tests require every public Markdown guide to appear once.
 The layout is responsive and uses native collapsible navigation without a JavaScript
 dependency. A static export alone is not a successful live deployment.
@@ -148,7 +210,7 @@ included. `.dockerignore` excludes local/private material from `COPY . .`. Neith
 removes anything already committed, and the container build remains unverified.
 
 The distribution name is `quibble-ml`. A release would: bump `version` in `pyproject.toml` and
-`quibble/__init__.py`, update the docs' trust-level table, build with `python -m build`, and upload with
+`quibble_ml/__init__.py`, update the docs' trust-level table, build with `uv build`, and upload with
 `twine`. The MIT copyright attribution is Quibble contributors.
 
 ## GitHub Pages deployment
@@ -177,8 +239,8 @@ Remote deployment and CI are unverified until their actual workflow runs succeed
 To build and preview locally from the checkout:
 
 ```powershell
-python -m pip install -e ".[site]"
-python -m quibble.site --out build\quibble --base-path /quibble
+uv sync --locked --no-dev --extra site
+python -m quibble_ml.site --out build\quibble --base-path /quibble
 python -m http.server 8877 --bind 127.0.0.1 --directory build
 ```
 
@@ -189,5 +251,5 @@ files. Use a fresh output name for another build.
 For a root-domain site, build with `--base-path ""` and serve the output directory itself.
 
 About is the landing page. **Workbench** on the static site is a local-installation
-page, not an interactive model service. Users run `python -m quibble web --open` on
+page, not an interactive model service. Users run `python -m quibble_ml web --open` on
 their own machine; GitHub Pages cannot host the Python server or receive user data.

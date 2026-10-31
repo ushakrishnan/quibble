@@ -6,13 +6,13 @@ description: Generated report structure, evidence-based interpretation, figures,
 ## Reports
 
 ```bash
-quibble report [--out results] [--datasets a,b] [--swap histgb:lightgbm] [--thresholds limits.json] [--require-thresholds]
+quibble-ml report [--out results] [--datasets a,b] [--swap histgb:lightgbm] [--thresholds limits.json] [--require-thresholds]
 ```
 Writes `<out>/report/report.md` plus PNG figures next to it. Datasets default to every folder under
 `--out` that contains results. `--swap INCUMBENT:CANDIDATE` can be repeated and is evaluated for each
 dataset.
 
-Figures need matplotlib, included in `requirements.txt`. Without it the tables are still written and
+Figures need matplotlib, included in the `report` and `web` extras. Without it the tables are still written and
 a note says the figures were skipped.
 
 ## Structure
@@ -35,6 +35,11 @@ a note says the figures were skipped.
      when they differ, the most over-represented trait (only shown if its lift is at least 1.5x,
      otherwise "none notable"), and a link to the CSV of disputed rows,
    - **Calibration** (classification): reliability curves (`fig_<dataset>_calibration.png`),
+   - **Per-class calibration:** one-vs-rest ECE and support for up to twenty
+     backend/class entries, reliability panels for the first six classes, and
+     links to complete class-summary and bin CSVs. Empty and one-sided support,
+     rare classes, repeated-row weighting, and unknown legacy labels stay visible.
+     These descriptive diagnostics do not alter swap policy,
    - **Slices:** the five slices with the largest spread between backends,
    - **Swap check** sections, if requested, with the default/custom policy source and a table
      of all effective settings, including defaults inherited from omitted custom keys.
@@ -96,7 +101,7 @@ The report reuses saved predictions and records, so adding a `--swap` or changin
 does not retrain models. Analysis also reloads the original dataset for traits and slices;
 an absent OpenML cache can require network access even during report generation.
 Pass the same `--thresholds` file when regenerating to preserve your policy; it is not
-auto-discovered. Without it, reports use the [packaged defaults](../quibble/swap_thresholds.json).
+auto-discovered. Without it, reports use the [packaged defaults](../quibble_ml/swap_thresholds.json).
 `--require-thresholds` rejects a missing or empty policy before writing a report.
 Browser full runs save an effective policy beside their job record for reuse.
 Custom runs also retain the original overrides so inherited defaults remain identifiable.
@@ -167,3 +172,40 @@ including its dataset folders, when moving a report and its evidence. Review the
 interpretation and add application-specific context before
 publishing. Regeneration overwrites the report, including any manual edits; keep publication notes
 in a separate document.
+
+## Interaction rule evidence
+
+Reports accept the same opt-in flags as analysis:
+
+```bash
+quibble-ml report --datasets D --out results \
+  --interaction-pair histgb:lightgbm \
+  --interaction-features age,income,region \
+  --interaction-exclude customer_id,final_outcome \
+  --interaction-seed 17 --interaction-min-rows 20 --interaction-min-groups 2
+```
+
+The interaction section names the ordered pair, discovery/evaluation split,
+support status, rule type, paired disagreement and quality difference. It visibly
+qualifies selection and shared-model dependence: splitting an existing CV pool is
+not independent confirmation, and no interaction rule changes a swap verdict.
+Insufficient evaluation support suppresses estimates; no rules is a valid result,
+not evidence that the models are equivalent. Recipe identities, schema and exact
+missing/unseen-category semantics are available in the linked JSON.
+
+If analysis previously requested an explainer, report generation restores its
+**specification**, not its learned rules, and recomputes everything against current
+paired evidence. Explicit report flags override the saved specification. Invalid
+pair/recipe requests produce diagnostics rather than silently displaying cached
+rules. The Python `build(..., interaction=InteractionSpec(...))` API is also opt-in.
+
+Reports link `interaction_rules.json` and `interaction_rules.csv` in the dataset's
+analysis directory. Dated snapshots automatically include both files and rewrite
+report links to the archived copies. Copy the whole snapshot for a self-contained
+export. New rule exports contain no raw feature records, category vocabulary,
+row IDs or group IDs, but learned thresholds and aggregate statistics still need
+privacy review. Existing disagreement CSVs retain their original raw-feature and
+row-level semantics; this opt-in does not make the entire archive public-safe.
+
+See [Interaction analysis](analysis.md#opt-in-disagreement-interaction-rules) for
+feature review, support, encoding, and reproducibility details.

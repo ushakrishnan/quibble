@@ -5,25 +5,29 @@ description: Commands and options for running models, analyzing results, and eva
 
 ## CLI reference
 
-All commands are `quibble <command> [options]`. `python -m quibble <command>` is equivalent. Run
-`quibble <command> --help` for generated options, except `doctor`, which prints diagnostics.
+Commands are written instructions you can repeat instead of clicking through
+the browser. Running models creates evidence; analyzing or reporting existing
+predictions inspects that evidence without fitting the models again.
+
+All commands are `quibble-ml <command> [options]`. `python -m quibble_ml <command>` is equivalent. Run
+`quibble-ml <command> --help` for generated options, except `doctor`, which prints diagnostics.
 Square-bracketed options and placeholder names below are syntax illustrations, not commands
 to paste verbatim. See [getting started](getting-started.md) for executable examples.
 
 Settings can come from `.env`, environment variables, or flags; flags win. See
 [Configuration](configuration.md).
 
-## `quibble run`
+## `quibble-ml run`
 Run one backend on one dataset, or a sweep of many.
 
 Single run:
 ```bash
-quibble run --backend lightgbm --dataset credit-g --model-seed 0 --split-seed 0
+quibble-ml run --backend lightgbm --dataset credit-g --model-seed 0 --split-seed 0
 ```
 Sweep:
 ```bash
-quibble run --sweep --backends histgb,lightgbm --datasets credit-g,phoneme --cv 5x2 --model-seeds 0,1,2
-quibble run --sweep --backends all --datasets breast_cancer       # 'all' excludes the internal 'weak'
+quibble-ml run --sweep --backends histgb,lightgbm --datasets credit-g,phoneme --cv 5x2 --model-seeds 0,1,2
+quibble-ml run --sweep --backends all --datasets breast_cancer       # 'all' excludes the internal 'weak'
 ```
 
 | Flag | Meaning |
@@ -55,42 +59,42 @@ Behaviour worth knowing:
 - A backend refusing a dataset, or crashing, produces a result file with `refused` or `error`; the
   sweep carries on.
 
-## `quibble analyze`
+## `quibble-ml analyze`
 Confidence intervals, calibration, slices and disagreement for one dataset. Needs results from at
 least two backends for the disagreement part, and CV results for meaningful intervals.
 
 ```bash
-quibble analyze --dataset credit-g [--backends a,b,c] [--model-seed 0] [--metric auc] [--min-slice-n 30]
+quibble-ml analyze --dataset credit-g [--backends a,b,c] [--model-seed 0] [--metric auc] [--min-slice-n 30]
 ```
 Writes to `<out>/<dataset>/analysis/`. Backends are aligned on the splits they all completed; splits
 missing for any usable backend are dropped and listed; entirely unusable backends are
 excluded. See [Analysis](analysis.md).
 
-## `quibble swap`
+## `quibble-ml swap`
 ```bash
-quibble swap --incumbent histgb --candidate lightgbm --dataset credit-g [--model-seed 0] [--thresholds limits.json] [--require-thresholds]
+quibble-ml swap --incumbent histgb --candidate lightgbm --dataset credit-g [--model-seed 0] [--thresholds limits.json] [--require-thresholds]
 ```
 Prints a table of checks and an overall verdict. **Exit code: 0 = PASS, 1 = FAIL, 2 = INCONCLUSIVE**
 (also 1 if the incumbent has no usable runs or `--require-thresholds` is set without `--thresholds`).
 Without `--thresholds` the output identifies the
-[packaged defaults](../quibble/swap_thresholds.json); every effective setting is printed.
+[packaged defaults](../quibble_ml/swap_thresholds.json); every effective setting is printed.
 These limits need application-specific review. Export an editable copy without training:
 
 ```powershell
-quibble swap --export-thresholds limits.json
+quibble-ml swap --export-thresholds limits.json
 ```
 
 Export refuses to overwrite an existing file. `--require-thresholds` rejects missing or empty
 policies, not just missing filenames. See [Swap checks](swap.md).
 Partial policies remain allowed; their inherited packaged defaults are listed explicitly.
 
-## `quibble gate`
+## `quibble-ml gate`
 ```bash
-quibble gate --candidate lightgbm --dataset credit-g [--baseline linear] [--min-gain 0.01] [--model-seed 0] [--metric auc] [--out DIR]
+quibble-ml gate --candidate lightgbm --dataset credit-g [--baseline linear] [--min-gain 0.01] [--model-seed 0] [--metric auc] [--out DIR]
 ```
 Does the candidate beat a simple baseline (`linear`, or `dummy`) by at least `--min-gain`, with the
 whole interval above that margin? Run both models first (for example
-`quibble run --sweep --backends linear,lightgbm --datasets credit-g --cv 5x2`). **Exit code: 0 = PASS,
+`quibble-ml run --sweep --backends linear,lightgbm --datasets credit-g --cv 5x2`). **Exit code: 0 = PASS,
 1 = FAIL (not confidently better), 2 = INCONCLUSIVE.** "Nothing here is worth using" is a valid
 outcome. Incomplete candidate or baseline coverage produces FAIL even when quality on common
 successful splits passes. Required split IDs include saved baseline records and matching
@@ -98,9 +102,9 @@ invocation cells, not guessed contiguous IDs. The CLI lists missing/error/refusa
 reasons; the Python result separates `quality_verdict` from `overall` and includes `coverage`.
 See [Swap checks](swap.md) for how the interval is built.
 
-## `quibble report`
+## `quibble-ml report`
 ```bash
-quibble report [--datasets a,b] [--swap histgb:lightgbm]... [--thresholds limits.json] [--require-thresholds] [--report-dir DIR]
+quibble-ml report [--datasets a,b] [--swap histgb:lightgbm]... [--thresholds limits.json] [--require-thresholds] [--report-dir DIR]
 ```
 Writes `<out>/report/report.md` and figures. `--swap` can be repeated and is evaluated for every
 dataset. Without `--datasets`, every dataset folder with results is included.
@@ -108,42 +112,45 @@ Reports show the effective policy and whether defaults or custom settings were u
 `--require-thresholds` requires a non-empty explicit policy before report generation.
 See [Reports](reports.md).
 
-## `quibble compare`
+## `quibble-ml compare`
 Quick single-split summary: mean metrics per backend, refusals and errors, and pairwise disagreement
 for one split id. Useful for a fast look; use `analyze` for anything statistical.
 ```bash
-quibble compare --dataset credit-g [--split-seed 0]
+quibble-ml compare --dataset credit-g [--split-seed 0]
 ```
 
-## `quibble datasets`
+## `quibble-ml datasets`
 ```bash
-quibble datasets --list
-quibble datasets --verify [--names credit-g,wine]
+quibble-ml datasets --list
+quibble-ml datasets --verify [--names credit-g,wine]
 ```
 `--list` lists built-in, OpenML, and discovered local names without loading tables.
 Verification loads each selected dataset (downloading OpenML entries if needed), prints rows, features, task, categorical share, missing share, majority-class
-share and whether the OpenML name matches what the registry expects (`NAME MISMATCH` means the id
-is wrong). Writes `datasets_meta.json` in the **current directory**. Network errors are reported per
-dataset. Verification exits 1 if any dataset fails or a name mismatches, otherwise 0.
+share and whether the OpenML name matches the registry. Ordinary loading also rejects
+ID/name mismatches, misaligned rows and invalid targets. Writes `datasets_meta.json`
+in the **current directory**, including source identifiers, hashes and label order.
+The cache follows `QUIBBLE_DATA_HOME`, or `QUIBBLE_CACHE_DIR/openml` when blank.
+Network/validation errors are reported per dataset. Verification exits 1 if any
+dataset fails, otherwise 0; a successful metadata lookup alone is not verification.
 Without `--names`, all registered and discovered local datasets are verified.
 See [Datasets](datasets.md) and [Testing your own data](testing-your-data.md).
 
 Local names work with run, benchmark, analyze, swap, compare, and report:
 
 ```powershell
-python -m quibble benchmark --datasets payments --backends histgb,lightgbm --device cpu --smoke
+python -m quibble_ml benchmark --datasets payments --backends histgb,lightgbm --device cpu --smoke
 ```
 
 Create `data\payments\dataset.json` and the input table first. No direct file-path/target
 CLI syntax is implemented; the manifest declares target/task and column rules.
 
-## `quibble doctor`
+## `quibble-ml doctor`
 Prints Python, platform, CPU, RAM, git hash, installed package versions, and torch/CUDA/VRAM. Warns
 when free VRAM is low (another process may be holding the GPU).
 
-## `quibble demo`
+## `quibble-ml demo`
 ```bash
-quibble demo [--out results] [--cv 3x2] [--jobs 2] [--backends histgb,lightgbm,weak] [--force] [--retry-failed]
+quibble-ml demo [--out results] [--cv 3x2] [--jobs 2] [--backends histgb,lightgbm,weak] [--force] [--retry-failed]
 ```
 End-to-end demonstration on `breast_cancer`, `wine`, and `diabetes_reg`; forces
 `QUIBBLE_DEVICE=cpu` and model seed 0. The default backends run offline without PyTorch.
@@ -151,7 +158,7 @@ End-to-end demonstration on `breast_cancer`, `wine`, and `diabetes_reg`; forces
 need their packages in the chosen interpreter and may download weights.
 
 ```powershell
-python -m quibble demo --backends histgb,lightgbm,tabfm,kumo_tabular --jobs 1
+python -m quibble_ml demo --backends histgb,lightgbm,tabfm,kumo_tabular --jobs 1
 ```
 
 The report checks swaps from HistGB to the other selected backends, or from the first
@@ -165,14 +172,14 @@ example cached import failures after switching environments); `--force` reruns e
 also appear in its report. Dated snapshots preserve overwritten outputs and regenerated
 reports; `<out>/report/history.md` links to them.
 
-## `quibble benchmark`
+## `quibble-ml benchmark`
 
 Device-aware preset comparison with report generation:
 
 ```powershell
-python -m quibble benchmark --preset foundations --smoke
-python -m quibble benchmark --preset foundations --device cuda --force
-python -m quibble benchmark --backends histgb,autogluon --cv holdout --keep-models
+python -m quibble_ml benchmark --preset foundations --smoke
+python -m quibble_ml benchmark --preset foundations --device cuda --force
+python -m quibble_ml benchmark --backends histgb,autogluon --cv holdout --keep-models
 ```
 
 `--retry-failed` reruns only cells whose saved result is an error.
@@ -186,7 +193,7 @@ Device and parallelism follow `.env` unless overridden with `--device`, `--jobs`
 Full runs accept `--thresholds limits.json` for custom swap limits and
 `--require-thresholds` to require a non-empty explicit policy. Invalid policies are rejected
 before training. The generated report lists all effective settings and their source.
-Without a custom policy, the [packaged defaults](../quibble/swap_thresholds.json) apply.
+Without a custom policy, the [packaged defaults](../quibble_ml/swap_thresholds.json) apply.
 
 `--smoke` fixes holdout/seed 0, caps training/test rows at 128/32, and creates a unique
 `<out>/smoke/<id>/` directory. Smoke reports interpret the bounded setup measurements but
@@ -195,14 +202,14 @@ Smoke rejects threshold options because no swap checks are run.
 Preset reports exclude incompatible cached backends, show participation and failure
 status, and include AutoGluon validation leaderboard links when available.
 
-## `quibble web`
+## `quibble-ml web`
 
 Start the localhost experiment workbench for scenario planning, reviewed synthetic data,
 existing datasets, benchmark jobs, and reports:
 
 ```powershell
-quibble web --open
-quibble web --login --device-code --port 8876
+quibble-ml web --open
+quibble-ml web --login --device-code --port 8876
 ```
 
 Flags: `--port` (default 8765), `--open` (open browser), `--login` (explicit Azure CLI
@@ -215,27 +222,27 @@ Blog and Docs work locally, and GitHub links to the source repository.
 Browser saving continues directly to configuration;
 starting the experiment remains a separate explicit action.
 
-## `quibble generate`
+## `quibble-ml generate`
 
 Print an editable local example or generate a dataset from a reviewed specification:
 
 ```powershell
-quibble generate --example
-quibble generate --spec reviewed-spec.json
+quibble-ml generate --example
+quibble-ml generate --spec reviewed-spec.json
 ```
 
 Choose exactly one of `--example` or `--spec`. Generation is deterministic for the
 specification and software environment, never executes supplied code, and never
 overwrites a dataset folder. See the [specification guide](experiment-workbench.md#specification-and-generation-mathematics).
 
-## `quibble auth`
+## `quibble-ml auth`
 
 Check the optional planner's configuration or authenticate using Entra ID:
 
 ```powershell
-quibble auth
-quibble auth --device-code
-quibble auth --check
+quibble-ml auth
+quibble-ml auth --device-code
+quibble-ml auth --check
 ```
 
 `--check` acquires an AAD token without login; `--device-code` selects explicit device-code

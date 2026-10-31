@@ -1,22 +1,40 @@
 import json
+import os
 import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
-from quibble import __version__
+from quibble_ml import __version__
 
 
 def quibble(*args, **kw):
-    return subprocess.run([sys.executable, "-m", "quibble", *args], capture_output=True, text=True, **kw)
+    return subprocess.run([sys.executable, "-m", "quibble_ml", *args], capture_output=True, text=True, **kw)
 
 
 def test_version_and_help():
-    assert __version__ in quibble("--version").stdout
+    assert quibble("--version").stdout.strip() == f"quibble-ml {__version__}"
     h = quibble("--help").stdout
     for cmd in ("run", "analyze", "swap", "report", "demo", "doctor"):
         assert cmd in h
+
+
+def test_legacy_namespace_cannot_shadow_cli(tmp_path):
+    (tmp_path / "quibble.py").write_text(
+        'raise RuntimeError("The unrelated quibble package must not be imported")\n',
+        encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "PYTHONPATH": str(root)}
+    result = quibble("--version", cwd=tmp_path, env=env, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == f"quibble-ml {__version__}"
+
+
+def test_command_dispatch_uses_only_the_new_namespace():
+    from quibble_ml.cli import COMMANDS
+    assert all(module.startswith("quibble_ml.") for module in COMMANDS.values())
 
 
 def test_unknown_command_fails():
@@ -64,7 +82,7 @@ def test_demo_produces_successful_runs_and_report(tmp_path):
 
 @pytest.fixture
 def demo_calls(monkeypatch, tmp_path):
-    from quibble import report, run
+    from quibble_ml import report, run
     for key, value in {"QUIBBLE_OUT_DIR": str(tmp_path), "QUIBBLE_CV": "holdout",
                        "QUIBBLE_JOBS": "1", "QUIBBLE_DEVICE": "cpu",
                        "QUIBBLE_MODEL_SEEDS": "0"}.items():
@@ -84,7 +102,7 @@ def demo_calls(monkeypatch, tmp_path):
     ("histgb, tabfm,histgb", ["histgb", "tabfm"], [("histgb", "tabfm")]),
 ])
 def test_demo_selected_backends_and_swap_checks(demo_calls, tmp_path, capsys, selection, expected, swaps):
-    from quibble.cli import main
+    from quibble_ml.cli import main
     sweep, build = demo_calls
     assert main(["demo", "--backends", selection, "--out", str(tmp_path), "--force"]) == 0
     backends, datasets, cfg, force = sweep.call_args.args
@@ -97,7 +115,7 @@ def test_demo_selected_backends_and_swap_checks(demo_calls, tmp_path, capsys, se
 
 
 def test_demo_defaults_and_sanity_message_unchanged(demo_calls, tmp_path, capsys):
-    from quibble.cli import main
+    from quibble_ml.cli import main
     sweep, build = demo_calls
     assert main(["demo", "--out", str(tmp_path)]) == 0
     assert sweep.call_args.args[0] == ["histgb", "lightgbm", "weak"]
@@ -107,7 +125,7 @@ def test_demo_defaults_and_sanity_message_unchanged(demo_calls, tmp_path, capsys
 
 
 def test_demo_uses_shared_results_setting_without_out_override(demo_calls, tmp_path):
-    from quibble.cli import main
+    from quibble_ml.cli import main
     sweep, build = demo_calls
     assert main(["demo"]) == 0
     assert sweep.call_args.args[2].out_dir == str(tmp_path)
@@ -116,7 +134,7 @@ def test_demo_uses_shared_results_setting_without_out_override(demo_calls, tmp_p
 
 @pytest.mark.parametrize("selection", ["", "histgb,,tabfm", "histgb,unknown"])
 def test_demo_rejects_invalid_backends(demo_calls, tmp_path, capsys, selection):
-    from quibble.cli import main
+    from quibble_ml.cli import main
     sweep, build = demo_calls
     with pytest.raises(SystemExit) as exc:
         main(["demo", "--backends", selection, "--out", str(tmp_path)])

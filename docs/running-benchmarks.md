@@ -5,7 +5,10 @@ description: Dataset verification, controlled configurations, paired interpretat
 
 ## Running benchmarks you can publish
 
-This page is a protocol. Following it is what makes the numbers defensible.
+A fair comparison is like setting the exam before either student sees the
+answers. Decide the data, settings, costs and acceptable changes before looking
+at the scores. Following this protocol makes the experiment inspectable; it
+does not certify every statistical assumption or deployment decision.
 
 You can explore datasets and run bounded comparisons in the
 [browser workbench](experiment-workbench.md), or use the CLI below for automation and
@@ -23,8 +26,8 @@ size limits, resource failures, and refusals still apply and remain visible.
 |---|---|---|
 | Split | Holdout assigns about 70% of rows to training and 30% to testing. `3x1` trains on two thirds and tests on the remaining third in three fits. `3x2` repeats that process for six fits per method and model seed. | Held-out outcomes evaluate predictions on rows not supplied to that fit. Repeats show sensitivity to split assignments. |
 | Prepare | Quibble learns categorical preprocessing from training rows and applies it to test rows. Methods may also perform their own preprocessing. Classification splits preserve class proportions when counts permit. | Test rows must not teach the fitted preprocessing; shared splits keep comparisons paired. |
-| Fit | Every eligible selected method fits on each training split. Trees learn from those examples; pretrained tabular predictors prepare or condition on them without retraining foundation weights from scratch. | Each method receives the same training/test assignment under recorded settings. |
-| Predict | Predict held-out rows as a batch, then measure separate single-row inference calls. Save predictions, test outcomes, and row positions. | Prediction is evaluated separately from fit; pretrained methods can do much of their computation here. |
+| Fit | Every eligible selected method fits on each training split. Explicit tuned trees search training-only inner folds before refitting; pretrained methods follow their recorded task recipes. | Each method receives the same outer assignment; test answers must not choose parameters. |
+| Predict | Predict held-out rows as a batch and measure separate single-row calls when meaningful. Some adapters, including Mitra-v2 regression, perform loading and adaptation here; they receive no repeated fitting probes or invented pure-inference latency. Save predictions, test outcomes, and row positions. | Inclusive adaptation and prediction cost must not be presented as cheap inference. |
 | Analyze | Calculate quality, uncertainty, costs, disagreements, slices, and configured swap checks when comparable predictions exist. Record failures and exclusions. | Similar aggregate scores can hide different errors or operational costs. |
 | Report | Write interpreted Markdown, figures, participation, and source/configuration records. | Conclusions stay attached to reproducible evidence and missing coverage remains visible. |
 
@@ -49,14 +52,14 @@ uses CPU for all selected methods. It does not compare device speeds. Data prepa
 metrics, and reporting still use CPU; see [Configuration](configuration.md#choosing-cpu-or-gpu).
 
 ## 1. Prepare
-1. Verify selected datasets with `quibble datasets --verify --names credit-g,phoneme,adult`.
+1. Verify selected datasets with `quibble-ml datasets --verify --names credit-g,phoneme,adult`.
    Inspect the output and fix or drop any `NAME MISMATCH` or error. Omitting `--names`
    requests every registered dataset and may download all OpenML entries.
 2. Choose a device policy and keep it fixed. Use separate output roots for deliberate
    CPU-versus-CUDA experiments (`--out results_cpu`, `--out results_cuda`).
    CUDA sweeps exclude incompatible methods with reasons in the log and report participation.
    Use CPU to compare all baselines; CUDA-only subsets answer a narrower question.
-3. Check the machine with `quibble doctor`. Close anything that competes for CPU, RAM, or VRAM (for
+3. Check the machine with `quibble-ml doctor`. Close anything that competes for CPU, RAM, or VRAM (for
    example an inference server holding GPU memory).
 4. Pin the environment. Results store available package versions and a git hash; commit your work first
    so the hash means something.
@@ -73,6 +76,74 @@ A sensible final-run configuration:
 | `QUIBBLE_AG_TIME_LIMIT` | fixed (e.g. 120) | keeps AutoGluon's budget identical across datasets |
 | `QUIBBLE_TIMEOUT_S` | generous (1800+) | a timeout is recorded as a failure, so do not let slow-but-valid runs die |
 
+## Opt-in tuned tree comparisons
+
+Defaults-only runs remain unchanged. To search tree settings using only each
+outer training partition, explicitly select `--tier tuned` and a separate output
+root. Start with a small setup check before spending the full budget:
+
+```powershell
+quibble-ml benchmark --preset trees --datasets wine --device cpu --tier tuned --tune-trials 2 --tune-folds 2 --cv holdout --model-seeds 0 --threads 1 --jobs 1 --out results_tuned_check
+```
+
+For the standard equal-trial protocol:
+
+```powershell
+quibble-ml benchmark --preset trees --datasets wine --device cpu --tier tuned --tune-trials 20 --tune-folds 3 --cv 3x1 --model-seeds 0 --threads 1 --jobs 1 --timeout 1800 --out results_tuned_v1
+```
+
+Run the matching defaults campaign into another root with `--tier defaults`.
+Keep source data, outer CV/seeds, preprocessing and devices fixed when comparing
+the campaigns. Do not copy records from one root into the other to make a mixed
+pool: analysis remains within each campaign. Python callers can read an explicit
+paired cell with `quibble_ml.tuning.load_tier_pair(defaults_root, tuned_root,
+dataset, backend, split_seed, model_seed)`. It validates matching outer protocols,
+sources, test rows and targets without merging records. For an explicit
+same-backend, tier-qualified paired report:
+
+```powershell
+quibble-ml report --compare-tiers results_defaults results_tuned_v1 --tier-backend histgb --datasets wine --report-dir results_tier_comparison
+```
+
+Both roots must contain exactly matching successful cell sets and compatible
+outer protocols, source and training/test identities. The report shows
+`histgb[defaults]` and `histgb[tuned]` separately, with paired cell point
+differences and full cost. It does not merge pools, run a new search, issue a
+swap approval or claim statistical significance.
+
+This is equal **trial/fold budget**, not equal realized compute or training time.
+The full budget is 61 fits per tree per outer cell: 60 inner fits and a final
+refit. Record failures and measured search plus refit cost, not only the selected
+model's fit. The small command above checks execution, not deployment quality.
+
+Inner preprocessing is fit independently on each inner training fold. Grouped
+data keep entities disjoint; temporal data use forward folds, strict time
+boundaries and any declared row-count `purge_gap`. All classes must occur on both
+sides of each inner fold. Impossible constraints cause an explicit failure, not
+a random-row fallback. Outer test targets are never an input to search or early
+stopping; only the refitted winner is evaluated on the outer test partition.
+
+The finite versioned domains, scoring, tie-breaker, budgets, seeds, timings and
+every attempted fold are recorded in JSON. Repeating the same recipe gives the
+same candidate order and selection where the backend permits deterministic
+execution; hardware/library differences, especially CUDA, can still matter.
+Changing the search recipe requires a new root, even with `--force`.
+
+The outer worker `--timeout` is authoritative. `--tune-timeout-s` optionally
+checks a cooperative search/refit deadline around fits but cannot interrupt a
+fit in progress. Killed or incomplete searches do not count as successful gate
+evidence. Foundation adapters included alongside tuned trees retain their
+defaults or explicit fine-tune recipe labels and costs; tree tuning does not
+give every method equal resources or new commercial usage rights.
+
+In the browser, choose **Tuned trees** under Methods and settings, then explicitly
+approve the exact search on Start. Full runs also require full-run consent.
+Any setting change clears both approvals; ambient environment settings cannot
+silently opt the browser into tuning. Reports distinguish campaign/adapter tiers,
+attempted/successful fits, valid trials and overlapping search/refit/full cost.
+Inspect `training_protocol.csv`, `stage_costs.csv` and full provenance JSON for
+the complete evidence, including failed attempts.
+
 ## 3. Estimate the cost
 `runs = backends x datasets x splits x model seeds`. Each run costs a few seconds of process start-up
 plus fit and predict time. Example: 5 backends x 12 datasets x 10 splits x 1 seed = 600 runs. AutoGluon
@@ -81,21 +152,21 @@ alone at 120 s is 12 x 10 x 120 s = 4 hours per model seed. Plan around that: fo
 
 ## 4. Run
 ```bash
-quibble run --sweep --backends histgb,lightgbm,catboost,autogluon --datasets credit-g,phoneme,adult --cv 5x2 --model-seeds 0 --device cpu --jobs 1 --out results_cpu
+quibble-ml run --sweep --backends histgb,lightgbm,catboost,autogluon --datasets credit-g,phoneme,adult --cv 5x2 --model-seeds 0 --device cpu --jobs 1 --out results_cpu
 ```
 - The sweep is **resumable**: re-running the same command skips finished cells. If you change device,
   preprocessing or CV scheme but keep the output directory, quibble warns that old results are being
   skipped. Use `--force` or a new `--out`.
   Changing the split scheme/seed can change shared test arrays; use a new root when
   that happens because `--force` does not bypass the test-row consistency guard.
-- Failures do not stop the sweep. Check `quibble report` afterwards: the failure matrix shows which
+- Failures do not stop the sweep. Check `quibble-ml report` afterwards: the failure matrix shows which
   backend refused or crashed on which dataset.
 
 ## 5. Analyse
 ```bash
-quibble analyze --dataset credit-g --out results_cpu
-quibble swap --incumbent histgb --candidate lightgbm --dataset credit-g --out results_cpu
-quibble report --out results_cpu --swap histgb:lightgbm
+quibble-ml analyze --dataset credit-g --out results_cpu
+quibble-ml swap --incumbent histgb --candidate lightgbm --dataset credit-g --out results_cpu
+quibble-ml report --out results_cpu --swap histgb:lightgbm
 ```
 Read [Analysis](analysis.md) and the "How to read this" section of the report before drawing
 conclusions. In particular:

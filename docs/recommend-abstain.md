@@ -8,7 +8,7 @@ description: Baseline gates and data flags (shipped) and the proposed recommend(
 Proposed extension to the current evidence-based comparison workflow.
 
 > [!IMPORTANT]
-> Partly implemented. Shipped: [`quibble gate`](cli-reference.md#quibble-gate) (does a model beat a
+> Partly implemented. Shipped: [`quibble-ml gate`](cli-reference.md#quibble-ml-gate) (does a model beat a
 > `dummy` or `linear` baseline by a chosen margin, with an interval-backed verdict and an
 > INCONCLUSIVE outcome), [data flags](analysis.md#data-flags) (single-feature leakage, ID-like columns,
 > duplicates, time-like columns on a random split), and group and temporal splits for local data.
@@ -50,8 +50,8 @@ the same validated tables as the existing comparison workflow.
 The gate command covers rule 1 below for one candidate at a time.
 
 ```python
-result = quibble.compare(dataset, target="invoice_paid_late", task="classification")
-rec = quibble.recommend(result)
+result = quibble_ml.compare(dataset, target="invoice_paid_late", task="classification")
+rec = quibble_ml.recommend(result)
 
 rec.decision      # "use" | "abstain"
 rec.backend       # chosen backend name, or None on abstain
@@ -65,7 +65,7 @@ This is a proposed design, not existing code.
 
 Rules run in order. The first that fires decides.
 
-1. **Baseline gate** (shipped as `quibble gate`). A backend is eligible only if it beats the baseline on the primary metric by at least a minimum margin, and the paired bootstrap interval on the difference excludes zero. Primary metric: log loss or AUC for classification, MAE or RMSE for regression. Make the margin and interval level configurable, with conservative defaults.
+1. **Baseline gate** (shipped as `quibble-ml gate`). A backend is eligible only if it beats the baseline on the primary metric by at least a minimum margin, and the paired bootstrap interval on the difference excludes zero. Primary metric: log loss or AUC for classification, MAE or RMSE for regression. Make the margin and interval level configurable, with conservative defaults.
 2. **Abstain.** If no backend passes the baseline gate, return `abstain` with the observed reason. Distinguish insufficient evidence from no useful measured improvement; do not infer no signal or leakage from a failed significance gate alone.
 3. **Tie-break by simplicity.** Among eligible backends meeting a defined practical-equivalence rule, prefer the simpler, faster and cheaper one. Failure to detect a difference alone does not establish equivalence.
 4. **Calibration check.** For classification, if the winner's probabilities are poorly calibrated and a cheap recalibration fixes it, say so. If not, add a caveat.

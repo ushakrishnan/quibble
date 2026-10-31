@@ -1,6 +1,6 @@
 # Quibble
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 [![CSV and Parquet](https://img.shields.io/badge/Data-CSV%20%7C%20Parquet-0ea5e9)](docs/testing-your-data.md)
 [![CPU and CUDA](https://img.shields.io/badge/Compute-CPU%20%7C%20CUDA-76B900?logo=nvidia&logoColor=white)](docs/gpu-and-docker.md)
@@ -26,6 +26,9 @@ measures how long each takes and how much memory it uses.
 You get a side-by-side report before replacing one prediction tool with another.
 Sometimes the honest answer is that there is not enough evidence to decide.
 
+For explanations of each capability, with everyday examples and explicit limits,
+read [What Quibble does](docs/what-quibble-does.md).
+
 ## Technical overview
 
 Quibble runs paired evaluations of tabular classifiers and regressors using shared
@@ -38,7 +41,8 @@ explicit errors or refusals.
 Configurable replacement checks return PASS, FAIL, or INCONCLUSIVE with CLI exit
 codes for CI. Those verdicts depend on the data, split design, settings, and limits;
 they are not deployment certification. Use the local web workbench or CLI.
-Quibble is not an automatic tuner or model-serving platform.
+An opt-in bounded tree-tuning tier keeps its search inside training folds.
+Quibble is not an unrestricted AutoML service or model-serving platform.
 
 Chat models can also analyze tables or use tools to run predictors. Quibble does not
 yet include a chat-LLM predictor; see the [scope and proposed evaluation](docs/rationale.md#could-chatgpt-predict-from-the-same-csv).
@@ -46,15 +50,15 @@ yet include a chat-LLM predictor; see the [scope and proposed evaluation](docs/r
 ## See the workflow
 
 1. Choose existing data or design a synthetic dataset, then review its sample.
-2. Select prediction methods, device policy, and evaluation splits.
-3. Read the report, including uncertainty, disagreements, costs, and failures.
+2. Select methods, device policy and splits, then explicitly start the reviewed request.
+3. Open the saved report, including uncertainty, disagreements, costs, and failures.
 
-This excerpt from a real local full comparison shows where HistGB and LightGBM
-disagree on the bundled fictional `grocery_sample` dataset using the current
+This excerpt from a real local full comparison using a holdout split shows the saved report
+for HistGB and LightGBM on the fictional `grocery_sample` dataset using the current
 neutral theme. No provider request or private data is involved. It is an
 illustration, not evidence about real grocery operations.
 
-![Current workbench report showing a disagreement heatmap and paired prediction counts on the fictional grocery sample](docs/assets/screenshots/workbench-results.png)
+![Current sidebar workbench showing a saved full-run report for the fictional grocery sample](docs/assets/screenshots/workbench-results.png)
 
 See the [visual walkthrough](docs/experiment-workbench.md#visual-walkthrough) for all
 three screens, or the [report guide](docs/reports.md) for the evidence and its limits.
@@ -66,67 +70,67 @@ three screens, or the [report guide](docs/reports.md) for the evidence and its l
 | Quality and uncertainty | Test-set bootstrap and approximate corrected split intervals (5+ splits), calibration, and exploratory slices |
 | Prediction-level differences | Disputed rows, who was right, and shared row traits |
 | Real execution costs | Fit time, prediction latency, memory, errors, and refusals |
-| Replacement decisions | PASS / FAIL / INCONCLUSIVE checks with configurable limits and CI exit codes; `quibble gate` asks whether a model beats a simple baseline at all |
+| Replacement decisions | PASS / FAIL / INCONCLUSIVE checks with configurable limits and CI exit codes; `quibble-ml gate` asks whether a model beats a simple baseline at all |
 | Data checks | Flags for near-perfect single features, ID-like columns, duplicate rows, and time-like columns on a random split; group and temporal splits for local data |
 | Reproducible evidence | Saved predictions, source fingerprints for local data, dated reports, and explicit device labels |
 
-It is a comparison and verification tool, not a tuner, model server, or deployment platform.
+It is a comparison and verification tool, not a model server or deployment platform.
 See the [project rationale](docs/rationale.md) for the scope and motivation.
 
 ## Quick start
 
 ### Set up this repository's local environment
 
-Use Python 3.13 for this Windows setup; the full requirements need Python 3.11+.
+Use Python 3.13 for this setup; core Quibble supports Python 3.10+.
 Run from Quibble's root. If another virtual environment is active, run `deactivate` first.
 
 ```powershell
-# Requires uv. Creates .venv only if it does not exist yet.
-if (-not (Test-Path .\.venv\Scripts\python.exe)) {
-    uv venv --python 3.13 --seed .venv
-}
+# Requires uv. Creates or syncs this checkout's .venv from uv.lock.
+uv sync --locked --python 3.13 --extra web --extra data
 & .\.venv\Scripts\Activate.ps1
 python -c "import sys; print(sys.executable)"
-python -m pip install -r requirements.txt
-python -m pip install --no-deps -e .
-python -m pip check
-python -m quibble doctor
+uv pip check
+python -m quibble_ml doctor
 ```
 
-Linux and macOS (Python 3.11 or newer; CUDA builds of PyTorch are Windows-only in `requirements.txt`):
+Linux and macOS:
 
 ```bash
-python3 -m venv .venv
+uv sync --locked --python 3.13 --extra web --extra data
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps -e .
-python -m pip check
-python -m quibble doctor
+uv pip check
+python -m quibble_ml doctor
 ```
 
 <details>
 <summary>Environment requirements, CUDA wheels, and maintenance</summary>
 
 - The interpreter must end in `quibble\.venv\Scripts\python.exe`.
-- Use only this local `.venv` and `requirements.txt`. Requirements include model libraries,
-  report dependencies, and pytest; the editable install registers local Quibble
-  without choosing another dependency set.
-- In later shells, activate the same `.venv`. After requirements change, repeat both install
-  commands and `pip check`. Never update packages while a sweep is running.
-- Installation needs network access and substantial disk space for PyTorch and AutoGluon,
-  plus later model downloads. Pass your trusted `--index-url` if a package mirror is required.
-- Windows requirements select `torch==2.11.0+cu128` and `torchvision==0.26.0+cu128` from the
-  official CUDA 12.8 wheel index, replacing CPU-only builds. GPU use needs a compatible NVIDIA
-  driver, not a separate CUDA Toolkit installation.
-- Windows/Python 3.13 dependency resolution and local CUDA detection have been checked.
-  Detection is not proof that every model, task, or dataset works; see [validation status](docs/index.md#trust-levels-what-has-actually-been-run).
+- `pyproject.toml` is the only dependency manifest; `uv.lock` records resolved versions
+  and hashes. The setup includes the browser, Parquet, and development tests, but no
+  optional foundation-model libraries or weight downloads.
+- Add selected extras with the same sync command, for example `--extra tabfm`,
+  `--extra kumo`, `--extra tabpfn`, `--extra tabicl`, `--extra mitra-v2`, or `--extra autogluon`.
+  TabFM/Kumo need Python 3.11+; AutoGluon needs Python below 3.14.
+  The experimental Mitra-v2 adapter requires Python 3.11-3.13 and CUDA on
+  Windows/Linux; its classification and regression recipes differ.
+- Sync is exact: keep all wanted `--extra` flags on subsequent commands or uv removes
+  their packages. Use `--dry-run` first when migrating an existing environment.
+- Native Windows CUDA wheels require the explicit `--extra windows-cuda` selection:
+  Torch 2.11.0 and torchvision 0.26.0, CUDA 12.8, from the official PyTorch index.
+  Other packages use PyPI; a compatible NVIDIA driver is still required.
+- Use `uv add`, `uv remove`, and `uv lock` to maintain dependencies, then check
+  `uv lock --check`. Never sync an environment while a sweep is running.
+- Optional extras can need several GB before pretrained weights are downloaded.
+  Dependency resolution or CUDA detection is not a successful model fit; see
+  [validation status](docs/index.md#trust-levels-what-has-actually-been-run).
 
 </details>
 
 ### Use the browser workbench
 
 ```powershell
-python -m quibble web --open
+python -m quibble_ml web --open
 ```
 
 Design a synthetic prediction task, review its assumptions and sample rows, save the
@@ -135,9 +139,10 @@ datasets are available. The default address opens About; choose **Open workbench
 to enter the experiment workflow at `/workbench`. The four bundled
 datasets cover grocery and retail clothing, each with binary and regression targets.
 Select one to reuse its saved rows without a cloud connection or regeneration.
-Start with **Use existing dataset** or **Design new dataset**, then follow
-**Choose data -> Configure & run -> Results**. The run screen uses the chosen dataset;
-**Past experiments** opens saved reports independently.
+Home and the sidebar provide existing data, synthetic design and local uploads.
+Follow **Choose data -> Methods and settings -> Start and monitor**.
+The run draft uses one reviewed dataset; **Experiment history** opens saved reports
+independently, without losing the draft or interrupting execution monitoring.
 The single existing-data selector filters classification (binary or multiclass) and
 regression, grouping built-in, bundled, and saved tables without implying different
 readiness levels. New synthetic designs support binary classification or regression.
@@ -170,7 +175,7 @@ for automation and more extensive configurations.
 ### Try the demo
 
 ```powershell
-python -m quibble demo
+python -m quibble_ml demo
 ```
 
 Open `results/report/report.md` for the interpreted comparison, or use the report under
@@ -195,7 +200,7 @@ your configured output root.
 To include foundation models in the CPU demo:
 
 ```powershell
-python -m quibble demo --backends histgb,lightgbm,tabfm,kumo_tabular --jobs 1
+python -m quibble_ml demo --backends histgb,lightgbm,tabfm,kumo_tabular --jobs 1
 ```
 
 This still uses all three demo datasets, but may download weights and run much longer.
@@ -216,8 +221,8 @@ data/
 ```
 
 ```powershell
-python -m quibble datasets --verify --names payments
-python -m quibble benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --smoke
+python -m quibble_ml datasets --verify --names payments
+python -m quibble_ml benchmark --datasets payments --backends histgb,lightgbm --device cpu --jobs 1 --smoke
 ```
 
 Follow **[Testing your own data](docs/testing-your-data.md)** for the manifest, accepted formats,
@@ -237,10 +242,10 @@ It defaults to `wine`, CV `3x2`, and model seed 0.
 
 ```powershell
 # Bounded setup check; may download weights.
-python -m quibble benchmark --preset foundations --smoke
+python -m quibble_ml benchmark --preset foundations --smoke
 
 # Full comparison; archive and replace selected cached measurements.
-python -m quibble benchmark --preset foundations --force
+python -m quibble_ml benchmark --preset foundations --force
 ```
 
 <details>
@@ -249,7 +254,7 @@ python -m quibble benchmark --preset foundations --force
 ```powershell
 # Optional fitted models and AutoGluon's validation leaderboard.
 # Use a separate root when changing from the CV scheme above to holdout.
-python -m quibble benchmark --backends histgb,autogluon --cv holdout --keep-models --out results_holdout
+python -m quibble_ml benchmark --backends histgb,autogluon --cv holdout --keep-models --out results_holdout
 ```
 
 - `--backends` overrides the preset. Other controls include `--datasets`, `--cv`,
@@ -302,8 +307,8 @@ for the split, fit, held-out prediction, and analysis sequence.
 <summary>Explicit CUDA example, resource failures, and mixed-device reporting</summary>
 
 ```powershell
-python -m quibble doctor
-python -m quibble benchmark --backends catboost,tabfm,kumo_tabular --datasets wine --cv 3x2 --model-seeds 0 --device cuda --jobs 1 --out results_cuda --force
+python -m quibble_ml doctor
+python -m quibble_ml benchmark --backends catboost,tabfm,kumo_tabular --datasets wine --cv 3x2 --model-seeds 0 --device cuda --jobs 1 --out results_cuda --force
 ```
 
 - Let a current sweep finish before another writes to the same output root.
@@ -381,7 +386,7 @@ from the project root, independent of the shell's working directory:
   need them; provider folders appear as files are downloaded. Later runs reuse cached files where
   supported, although remote metadata checks may still occur.
 - Pip/uv installation caches are separate and unchanged. Runtime caches are not copied into
-  result snapshots. `python -m quibble doctor` prints the effective cache root.
+  result snapshots. `python -m quibble_ml doctor` prints the effective cache root.
 
 </details>
 
@@ -442,7 +447,7 @@ results/
 Regenerate without training:
 
 ```powershell
-python -m quibble report --swap lightgbm:tabfm --swap lightgbm:kumo_tabular
+python -m quibble_ml report --swap lightgbm:tabfm --swap lightgbm:kumo_tabular
 ```
 
 Read `results/report/report.md` for current results or `results/report/history.md` for history.
@@ -456,25 +461,25 @@ they are dataset-specific recommendations, not guarantees. A swap FAIL is not an
 
 | Command | Purpose |
 |---|---|
-| `quibble demo` | Offline CPU demonstration; optional `--backends` and `--force` |
-| `quibble benchmark` | Device-aware presets, `--smoke`, optional `--keep-models` |
-| `quibble run --sweep --backends a,b --datasets x,y` | One worker process per model/dataset/split/seed; `--retry-failed` reruns only errors |
-| `quibble analyze --dataset x` | Intervals, calibration, slices, disputed-row CSVs |
-| `quibble swap --incumbent A --candidate B --dataset x` | Replacement verdict; exit codes 0 / 1 / 2; `--require-thresholds` requires an explicit policy |
-| `quibble gate --candidate B --dataset x` | Does B beat a simple baseline (`linear`, `dummy`)? Exit codes 0 / 1 / 2 |
-| `quibble report --swap A:B` | Markdown report and figures |
-| `quibble compare --dataset x` | Quick single-split summary across model seeds |
-| `quibble datasets --verify --names credit-g,phoneme` | Verify selected OpenML entries before use |
-| `quibble doctor` | Environment, cache root, CUDA detection, and available VRAM |
+| `quibble-ml demo` | Offline CPU demonstration; optional `--backends` and `--force` |
+| `quibble-ml benchmark` | Device-aware presets, `--smoke`, optional `--keep-models` |
+| `quibble-ml run --sweep --backends a,b --datasets x,y` | One worker process per model/dataset/split/seed; `--retry-failed` reruns only errors |
+| `quibble-ml analyze --dataset x` | Intervals, calibration, slices, disputed-row CSVs |
+| `quibble-ml swap --incumbent A --candidate B --dataset x` | Replacement verdict; exit codes 0 / 1 / 2; `--require-thresholds` requires an explicit policy |
+| `quibble-ml gate --candidate B --dataset x` | Does B beat a simple baseline (`linear`, `dummy`)? Exit codes 0 / 1 / 2 |
+| `quibble-ml report --swap A:B` | Markdown report and figures |
+| `quibble-ml compare --dataset x` | Quick single-split summary across model seeds |
+| `quibble-ml datasets --verify --names credit-g,phoneme` | Verify selected OpenML entries before use |
+| `quibble-ml doctor` | Environment, cache root, CUDA detection, and available VRAM |
 
 For a real OpenML benchmark:
 
 ```powershell
 # Create settings only if absent, then edit device and other settings as needed.
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-python -m quibble datasets --verify --names credit-g,phoneme
-python -m quibble run --sweep --backends histgb,lightgbm,catboost,autogluon --datasets credit-g,phoneme --cv 5x2 --model-seeds 0 --jobs 1
-python -m quibble report --swap histgb:lightgbm
+python -m quibble_ml datasets --verify --names credit-g,phoneme
+python -m quibble_ml run --sweep --backends histgb,lightgbm,catboost,autogluon --datasets credit-g,phoneme --cv 5x2 --model-seeds 0 --jobs 1
+python -m quibble_ml report --swap histgb:lightgbm
 ```
 
 </details>
@@ -507,9 +512,9 @@ device differences, and policy-limit failures.
   compare medians; memory is a baseline-adjusted process peak, not model-only footprint.
 - The worst-slice bootstrap recomputes the maximum over fixed, target-selected masks.
   Family-wise coverage remains unverified. Swap defaults live in the
-  packaged [swap_thresholds.json](quibble/swap_thresholds.json), shared by the CLI and UI.
+  packaged [swap_thresholds.json](quibble_ml/swap_thresholds.json), shared by the CLI and UI.
   These are the limits Quibble uses, not universally safe acceptance criteria.
-  Export a copy with `quibble swap --export-thresholds my_limits.json`, edit it, and pass
+  Export a copy with `quibble-ml swap --export-thresholds my_limits.json`, edit it, and pass
   `--thresholds my_limits.json`. Use `--require-thresholds` in CI to require a non-empty policy;
   partial overrides remain allowed and inherited defaults are listed explicitly.
   In the workbench, choose a full run and open **Swap acceptance policy (full runs)** to
@@ -554,20 +559,28 @@ python -m pytest
 <summary>Validation coverage, CI, Docker, and release status</summary>
 
 - The CI definition targets Python 3.10 to 3.13 on Linux plus Python 3.13 on Windows, installing
-  `.[dev]` (everything the tests import) but not the heavy model backends. It has not yet run
-  remotely; the same steps pass locally on Linux with Python 3.12.
-- Docker entry points use modules, for example `docker compose run --rm cpu quibble.doctor`.
+  the locked dev group and web/data extras, but not heavy model backends.
+  Remote execution of the updated workflow remains unverified.
+- Docker entry points use modules, for example `docker compose run --rm cpu quibble_ml.doctor`.
   Containers run as UID/GID 1000 and remain unvalidated; see [GPU and Docker](docs/gpu-and-docker.md).
 - Evaluation, analysis, swap checks, and reporting are implemented. The package is not published; its distribution name is
   `quibble-ml` because plain `quibble` belongs to another project.
+  The import is `quibble_ml` and the command is `quibble-ml`; see
+  [migration instructions](docs/getting-started.md#migrating-from-the-old-import-and-command)
+  before reusing an older environment or retained model.
 - CPU tests and real smoke checks cover the tree backends, AutoGluon, TabFM, and Kumo.
   Local records also show CUDA classification fits for CatBoost/TabFM/Kumo; they do not establish
-  full GPU coverage. TabPFN end-to-end, OpenML IDs/downloads, Docker, and remote CI still
-  need validation. See [current trust levels](docs/index.md#trust-levels-what-has-actually-been-run).
+  full GPU coverage. All fourteen OpenML entries loaded and reloaded offline;
+  real HistGB/Weak holdouts covered `credit-g` and `abalone`. TabPFN end-to-end,
+  Docker and remote CI still need validation. TabICLv2 has completed real offline
+  Wine classification and diabetes regression holdouts on CPU and CUDA, with
+  HistGB comparison on CPU; broader coverage remains experimental. Its pinned
+  adapter keeps cached-only weights by default.
+  See [current trust levels](docs/index.md#trust-levels-what-has-actually-been-run).
 - Hosted services are deferred. Remaining work includes the verified multi-dataset benchmark,
   release validation, final attribution, and reviewed benchmark configurations.
 - Shipped: leakage and data flags, group and temporal splits for local data, simple baselines
-  (`dummy`, `linear`), and `quibble gate`. Still proposed: a Python `recommend()` API and
+  (`dummy`, `linear`), and `quibble-ml gate`. Still proposed: a Python `recommend()` API and
   license-aware selection; see [recommend and abstain](docs/recommend-abstain.md).
 - The [synthetic experiment workbench](docs/experiment-workbench.md) supports bounded
   independent-row generation; it does not validate domain realism. The configured planner drafts the

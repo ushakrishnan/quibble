@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble.backends import BACKENDS
-from quibble.config import Config
-from quibble.datasets import load, split
-from quibble.metrics import Boot, corrected_interval, widen
-from quibble.run import is_failed, package_changes, run_one, save_npy, settings_differ, stem
-from quibble.swap import SwapError, evaluate, tri
+from quibble_ml.backends import BACKENDS
+from quibble_ml.config import Config
+from quibble_ml.datasets import load, split
+from quibble_ml.metrics import Boot, corrected_interval, widen
+from quibble_ml.run import is_failed, package_changes, run_one, save_npy, settings_differ, stem
+from quibble_ml.swap import SwapError, evaluate, tri
 
 
 # ---------------------------------------------------------------- statistics
@@ -66,10 +66,10 @@ def test_swap_refuses_implicit_thresholds_when_required(cv_results):
 
 
 def test_swap_cli_prints_the_default_policy_and_honours_require_flag(cv_results):
-    base = [sys.executable, "-m", "quibble", "swap", "--incumbent", "histgb", "--candidate", "lightgbm",
+    base = [sys.executable, "-m", "quibble_ml", "swap", "--incumbent", "histgb", "--candidate", "lightgbm",
             "--dataset", "breast_cancer", "--out", str(cv_results)]
     out = subprocess.run(base, capture_output=True, text=True).stdout
-    assert "THRESHOLDS: packaged defaults (quibble/swap_thresholds.json)" in out
+    assert "THRESHOLDS: packaged defaults (quibble_ml/swap_thresholds.json)" in out
     assert '"max_quality_drop": 0.01' in out
     refused = subprocess.run(base + ["--require-thresholds"], capture_output=True, text=True)
     assert refused.returncode == 1 and "non-empty policy" in refused.stderr
@@ -161,7 +161,7 @@ def test_saved_split_files_are_written_atomically(tmp_path):
 def test_run_metrics_agree_with_scikit_learn():
     from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 
-    from quibble.run import metrics
+    from quibble_ml.run import metrics
     rng = np.random.default_rng(1)
     y = rng.integers(0, 2, 200)
     p1 = np.clip(0.6 * y + 0.2 + rng.normal(0, 0.15, 200), 0.02, 0.98)
@@ -174,7 +174,7 @@ def test_run_metrics_agree_with_scikit_learn():
 
 # ---------------------------------------------------------------- backends
 def test_unseen_categories_do_not_trigger_pandas_deprecation_warnings():
-    from quibble.backends import Prep
+    from quibble_ml.backends import Prep
     train = pd.DataFrame({"c": pd.Series(["a", "b", "a", "b"], dtype=object), "x": [1.0, 2, 3, 4]})
     prep = Prep("native").fit(train)
     with warnings.catch_warnings():
@@ -207,13 +207,13 @@ def test_baselines_fit_predict_and_handle_unseen_categories(name):
 
 
 def test_doctor_prints_backend_verification_labels():
-    out = subprocess.run([sys.executable, "-m", "quibble", "doctor"], capture_output=True, text=True).stdout
+    out = subprocess.run([sys.executable, "-m", "quibble_ml", "doctor"], capture_output=True, text=True).stdout
     assert "backend verification" in out and "experimental" in out
 
 
 # ---------------------------------------------------------------- slices and flags
 def test_slices_follow_mutual_information_and_count_distinct_rows():
-    from quibble.slices import slice_masks, unique_rows
+    from quibble_ml.slices import slice_masks, unique_rows
     rng = np.random.default_rng(0)
     n = 600
     X = pd.DataFrame({f"noise{i}": rng.normal(size=n) for i in range(5)})
@@ -228,7 +228,7 @@ def test_slices_follow_mutual_information_and_count_distinct_rows():
 def test_data_flags_catch_planted_problems_and_stay_quiet_on_clean_data():
     from sklearn import datasets as d
 
-    from quibble.leakage import check
+    from quibble_ml.leakage import check
     X, y = d.load_breast_cancer(as_frame=True, return_X_y=True)
     assert check(X, y, "classification") == []
     X = X.copy()
@@ -304,7 +304,7 @@ def test_temporal_split_always_tests_on_the_future(panel):
 
 
 def test_split_scheme_is_part_of_the_dataset_fingerprint(panel):
-    from quibble.datasets import source_info
+    from quibble_ml.datasets import source_info
     directory, frame, spec = panel
     grouped = source_info("panel")["fingerprint"]
     write(directory, {**spec, "split": "random"})
@@ -338,7 +338,7 @@ def test_unparseable_time_column_is_an_error(panel):
 
 
 def test_analysis_with_group_split_reports_the_scheme(panel, monkeypatch):
-    from quibble.analyze import analyse
+    from quibble_ml.analyze import analyse
     out = panel[0].parent.parent / "results"
     monkeypatch.setenv("QUIBBLE_CV", "4x1")
     for sid in range(4):
@@ -353,7 +353,7 @@ def test_analysis_with_group_split_reports_the_scheme(panel, monkeypatch):
 
 # ---------------------------------------------------------------- baseline gate
 def test_gate_passes_a_real_model_over_a_dummy_and_fails_a_dummy_over_a_model(monkeypatch, tmp_path):
-    from quibble.gate import evaluate as gate
+    from quibble_ml.gate import evaluate as gate
     cfg = cfg_for(monkeypatch, tmp_path, QUIBBLE_CV="3x1")
     for ss in range(3):
         monkeypatch.setenv("QUIBBLE_SPLIT_SEED", str(ss))
@@ -377,7 +377,7 @@ def test_gate_command_exit_codes(monkeypatch, tmp_path):
         monkeypatch.setenv("QUIBBLE_SPLIT_SEED", str(ss))
         for b in ("dummy", "lightgbm"):
             run_one(b, "breast_cancer", 0, Config.from_env())
-    base = [sys.executable, "-m", "quibble", "gate", "--dataset", "breast_cancer", "--out", str(tmp_path)]
+    base = [sys.executable, "-m", "quibble_ml", "gate", "--dataset", "breast_cancer", "--out", str(tmp_path)]
     ok = subprocess.run(base + ["--candidate", "lightgbm", "--baseline", "dummy", "--min-gain", "0.1"],
                         capture_output=True, text=True)
     assert ok.returncode == 0 and "OVERALL: PASS" in ok.stdout

@@ -9,11 +9,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble.analyze import AnalysisError, analyse
-from quibble.config import Config
-from quibble.datasets import known, load, local_names, source_info, split, verify
-from quibble.run import run_one, settings_differ, stem
-from quibble.swap import SwapError, evaluate
+from quibble_ml.analyze import AnalysisError, analyse
+from quibble_ml.config import Config
+from quibble_ml.datasets import known, load, local_names, source_info, split, verify
+from quibble_ml.run import run_one, settings_differ, stem
+from quibble_ml.swap import SwapError, evaluate
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def test_csv_loading_keeps_target_out_of_features_and_records_labels(local_data)
 
 
 def test_category_vocabulary_is_learned_from_training_rows_only(local_data):
-    from quibble.backends import Prep
+    from quibble_ml.backends import Prep
     X, _, _ = load("payments")
     prep = Prep("ordinal").fit(X[X["region"] == "east"])
     transformed = prep.transform(X[X["region"] == "west"])
@@ -98,7 +98,7 @@ def test_invalid_manifests_are_explicit_errors(local_data, change, message):
     ("no_features", "at least one feature"),
     ("duplicate_header", "unique, nonempty headers"),
     ("extra_field", "fields, expected"),
-    ("nonnumeric_target", "Unable to parse"),
+    ("nonnumeric_target", "finite numeric"),
     ("infinite_target", "finite numeric"),
     ("too_few_rows", "at least 4"),
 ])
@@ -185,7 +185,7 @@ def test_changed_source_is_rejected_by_training_analysis_swap_and_compare(local_
         analyse("payments", out)
     with pytest.raises(SwapError, match="source differs"):
         evaluate("payments", "histgb", "histgb", out=out)
-    result = subprocess.run([sys.executable, "-m", "quibble", "compare", "--dataset", "payments",
+    result = subprocess.run([sys.executable, "-m", "quibble_ml", "compare", "--dataset", "payments",
                              "--out", str(out)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 2 and "source differs" in result.stderr
     run_one("histgb", "payments", 0, cfg, force=True)
@@ -203,7 +203,7 @@ def test_local_data_cli_end_to_end(local_data, task, extension, smoke):
         frame.to_parquet(directory / "data.parquet", index=False)
     spec.update(task=task, file=f"data.{extension}")
     write_spec(directory, spec)
-    args = [sys.executable, "-m", "quibble", "benchmark", "--datasets", "payments",
+    args = [sys.executable, "-m", "quibble_ml", "benchmark", "--datasets", "payments",
             "--backends", "histgb,lightgbm", "--device", "cpu", "--jobs", "1",
             "--out", str(out)]
     args += ["--smoke"] if smoke else ["--cv", "3x1"]
@@ -223,6 +223,6 @@ def test_dataset_cli_lists_local_names_and_verification_exits_nonzero(local_data
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     for args, code, message in [(["--list"], 0, "payments: local"),
                                 (["--verify", "--names", "missing"], 1, "ERROR")]:
-        result = subprocess.run([sys.executable, "-m", "quibble", "datasets", *args],
+        result = subprocess.run([sys.executable, "-m", "quibble_ml", "datasets", *args],
                                  cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == code and message in result.stdout, result.stdout + result.stderr

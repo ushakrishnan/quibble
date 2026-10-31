@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble import benchmark, report
-from quibble.backends import AutoGluon
-from quibble.cache import prepare_caches
-from quibble.config import Config
-from quibble.datasets import load
-from quibble.history import snapshot
-from quibble.run import run_one, smoke_positions, stem, sweep
+from quibble_ml import benchmark, report
+from quibble_ml.backends import AutoGluon
+from quibble_ml.cache import prepare_caches
+from quibble_ml.config import Config
+from quibble_ml.datasets import load
+from quibble_ml.history import snapshot
+from quibble_ml.run import run_one, smoke_positions, stem, sweep
 
 
 @pytest.fixture
@@ -53,14 +53,14 @@ def test_cache_paths_are_local_before_imports_and_override_inherited_hf(settings
 
 @pytest.mark.parametrize("device", ["cpu", "cuda", "auto"])
 def test_presets_respect_device_and_keep_models(settings, monkeypatch, device):
-    from quibble import config
+    from quibble_ml import config
     monkeypatch.setattr(config, "cuda_available", lambda: True)
     mocked_sweep = Mock(return_value={"cells": []})
     mocked_build = Mock(return_value=settings / "report.md")
     monkeypatch.setattr(benchmark, "sweep", mocked_sweep)
     monkeypatch.setattr(report, "build", mocked_build)
     monkeypatch.setenv("QUIBBLE_DEVICE", device)
-    monkeypatch.setattr(sys, "argv", ["quibble benchmark", "--keep-models"])
+    monkeypatch.setattr(sys, "argv", ["quibble-ml benchmark", "--keep-models"])
     assert benchmark.main() == 0
     backends, datasets, cfg, force = mocked_sweep.call_args.args
     assert backends == ["histgb", "lightgbm", "tabfm", "kumo_tabular"]
@@ -77,7 +77,7 @@ def test_presets_respect_device_and_keep_models(settings, monkeypatch, device):
 def test_benchmark_rejects_invalid_selections_before_running(settings, monkeypatch, args):
     mock = Mock()
     monkeypatch.setattr(benchmark, "sweep", mock)
-    monkeypatch.setattr(sys, "argv", ["quibble benchmark", *args])
+    monkeypatch.setattr(sys, "argv", ["quibble-ml benchmark", *args])
     with pytest.raises(SystemExit) as exc:
         benchmark.main()
     assert exc.value.code == 2
@@ -90,7 +90,7 @@ def test_benchmark_passes_explicit_policy_and_requirement_to_report(settings, mo
     monkeypatch.setattr(benchmark, "sweep", Mock(return_value={"cells": []}))
     build = Mock(return_value=settings / "report.md")
     monkeypatch.setattr(report, "build", build)
-    monkeypatch.setattr(sys, "argv", ["quibble benchmark", "--backends", "histgb",
+    monkeypatch.setattr(sys, "argv", ["quibble-ml benchmark", "--backends", "histgb",
                                     "--thresholds", str(limits), "--require-thresholds"])
     assert benchmark.main() == 0
     assert build.call_args.kwargs["thresholds"] == {"max_quality_drop": 0.02}
@@ -109,7 +109,7 @@ def test_benchmark_rejects_invalid_policy_before_training(settings, monkeypatch,
     limits.write_text(text, encoding="utf-8")
     run = Mock()
     monkeypatch.setattr(benchmark, "sweep", run)
-    monkeypatch.setattr(sys, "argv", ["quibble benchmark", "--backends", "histgb",
+    monkeypatch.setattr(sys, "argv", ["quibble-ml benchmark", "--backends", "histgb",
                                     "--thresholds", str(limits), *flags])
     with pytest.raises(SystemExit) as exc:
         benchmark.main()
@@ -119,14 +119,14 @@ def test_benchmark_rejects_invalid_policy_before_training(settings, monkeypatch,
 
 @pytest.mark.parametrize("cv", ["1x1", "3x0", "-2x1"])
 def test_invalid_fold_counts_are_configuration_errors(settings, monkeypatch, capsys, cv):
-    monkeypatch.setattr(sys, "argv", ["quibble benchmark", f"--cv={cv}"])
+    monkeypatch.setattr(sys, "argv", ["quibble-ml benchmark", f"--cv={cv}"])
     assert benchmark.main() == 2
     assert "config error" in capsys.readouterr().err
     assert not (settings / "results").exists()
 
 
 def test_relative_cache_paths_resolve_from_project_not_cwd(settings, monkeypatch):
-    from quibble import cache
+    from quibble_ml import cache
     monkeypatch.setattr(cache, "PROJECT_ROOT", settings)
     monkeypatch.setenv("QUIBBLE_CACHE_DIR", "downloads")
     elsewhere = settings / "elsewhere"
@@ -136,7 +136,7 @@ def test_relative_cache_paths_resolve_from_project_not_cwd(settings, monkeypatch
 
 
 def test_individual_cache_overrides(settings, monkeypatch):
-    from quibble import cache
+    from quibble_ml import cache
     monkeypatch.setattr(cache, "PROJECT_ROOT", settings)
     monkeypatch.setenv("QUIBBLE_SKLEARN_CACHE_DIR", "custom-data")
     monkeypatch.setenv("QUIBBLE_HF_CACHE_DIR", "custom-hf")
@@ -167,7 +167,7 @@ def test_smoke_cli_is_isolated_and_models_reload(settings):
     baseline.parent.mkdir(parents=True)
     baseline.write_text('{"marker": "keep benchmark data"}')
     r = subprocess.run(
-        [sys.executable, "-m", "quibble", "benchmark", "--backends", "histgb,weak",
+        [sys.executable, "-m", "quibble_ml", "benchmark", "--backends", "histgb,weak",
          "--datasets", "breast_cancer", "--smoke", "--device", "cpu", "--keep-models",
          "--out", str(root)], capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -285,7 +285,7 @@ def test_shared_rows_are_not_overwritten_by_incompatible_cv(settings):
 
 def test_full_benchmark_cache_and_incompatible_settings_report(settings):
     root = settings / "results"
-    args = [sys.executable, "-m", "quibble", "benchmark", "--backends", "histgb,weak",
+    args = [sys.executable, "-m", "quibble_ml", "benchmark", "--backends", "histgb,weak",
             "--datasets", "wine", "--cv", "holdout", "--device", "cpu", "--out", str(root)]
     first = subprocess.run(args, capture_output=True, text=True, timeout=120)
     assert first.returncode == 0, first.stdout + first.stderr
@@ -303,7 +303,7 @@ def test_full_benchmark_cache_and_incompatible_settings_report(settings):
 
 
 def test_unsupported_foundation_retention_is_explicit(settings, monkeypatch, capsys):
-    from quibble.backends import BACKENDS, HistGB
+    from quibble_ml.backends import BACKENDS, HistGB
 
     class FakeTabFM(HistGB):
         can_save = False
@@ -317,7 +317,7 @@ def test_unsupported_foundation_retention_is_explicit(settings, monkeypatch, cap
 
 
 def test_artifact_io_error_is_not_reported_as_success(settings, monkeypatch, capsys):
-    from quibble.backends import HistGB
+    from quibble_ml.backends import HistGB
 
     def fail(*args):
         raise OSError("disk full")

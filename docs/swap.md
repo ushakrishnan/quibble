@@ -5,10 +5,13 @@ description: Paired replacement checks, configurable limits, verdicts, and CI in
 
 ## Swap checks
 
-`quibble swap` answers: *is replacing the incumbent with the candidate safe on this dataset?*
+`quibble-ml swap` asks whether a replacement meets your configured limits on
+this dataset, given the available evidence. Think of it as a checklist, not a
+permission slip for deployment: PASS means the recorded checks passed, FAIL
+means a limit was exceeded, and INCONCLUSIVE means the evidence cannot decide.
 
 ```powershell
-quibble swap --incumbent histgb --candidate lightgbm --dataset credit-g
+quibble-ml swap --incumbent histgb --candidate lightgbm --dataset credit-g
 $LASTEXITCODE    # 0 PASS, 1 FAIL, 2 INCONCLUSIVE
 ```
 It reads existing results (run a CV sweep first) and writes
@@ -23,7 +26,10 @@ Each check is one of:
   independent rows. Other datasets test generality, not this dataset's uncertainty.
 
 Latency, memory and coverage have no interval, so they are PASS or FAIL from the point value
-(latency and memory compare medians). The **overall** verdict is FAIL if any check fails, else
+(latency and memory compare medians). If a recorded adapter performs fitting during
+prediction and cannot supply isolated single-row latency, that budget is explicitly
+INCONCLUSIVE. Its inclusive batch cost is not substituted for cheap inference or a
+passing latency check. The **overall** verdict is FAIL if any check fails, else
 INCONCLUSIVE if any is inconclusive, else PASS. A PASS is therefore always interval-backed for the
 quality, disagreement, calibration and slice checks: if fewer than 20 valid bootstrap resamples are
 available the check is INCONCLUSIVE and the note says how many resamples were unusable.
@@ -78,13 +84,14 @@ Notes:
   separately; `fit_total_s` is the sum.
 - If the candidate has no usable runs, `coverage` fails and the remaining checks are skipped.
 - If the incumbent has no usable runs, the command exits with code 1 and a message.
-- Verdicts are for default model settings: quibble does not tune hyperparameters.
+- Verdicts apply to the saved recipes, including explicit tuned-tree campaigns,
+  not to different settings or an unevaluated tuning budget.
 - Data flags (see [Analysis](analysis.md#data-flags)) are printed under the table and saved in the
   JSON. They never change the verdict, but a PASS should be read together with them.
 
 ## Changing the limits
 
-The packaged [swap_thresholds.json](../quibble/swap_thresholds.json) is the single source of
+The packaged [swap_thresholds.json](../quibble_ml/swap_thresholds.json) is the single source of
 default limits for swap checks in the CLI and workbench. It ships with the Python package,
 so defaults work outside a repository checkout. Analysis also uses its default confidence,
 regression-gap, near-margin, and minimum-slice settings.
@@ -99,9 +106,9 @@ against the cost of changed predictions and your deployment budgets. Keep the pa
 unchanged for reproducibility; export a working copy, edit it, and supply it explicitly:
 
 ```powershell
-quibble swap --export-thresholds my_limits.json
+quibble-ml swap --export-thresholds my_limits.json
 # Edit my_limits.json in your editor before evaluating.
-quibble swap --incumbent histgb --candidate lightgbm --dataset wine --thresholds my_limits.json --require-thresholds
+quibble-ml swap --incumbent histgb --candidate lightgbm --dataset wine --thresholds my_limits.json --require-thresholds
 ```
 
 Run both models first; `swap` reads saved benchmark results and does not train models.
@@ -171,15 +178,15 @@ alongside swap results. Smoke runs disable policy controls and save no swap poli
 Example GitHub Actions steps using registered names:
 
 ```yaml
-- run: quibble run --sweep --backends histgb,lightgbm --datasets wine --cv 5x2 --model-seeds 0,1 --device cpu --out results_ci
-- run: quibble swap --incumbent histgb --candidate lightgbm --dataset wine --out results_ci --thresholds limits.json --require-thresholds
+- run: quibble-ml run --sweep --backends histgb,lightgbm --datasets wine --cv 5x2 --model-seeds 0,1 --device cpu --out results_ci
+- run: quibble-ml swap --incumbent histgb --candidate lightgbm --dataset wine --out results_ci --thresholds limits.json --require-thresholds
 ```
 A non-zero exit fails the job. Decide explicitly whether INCONCLUSIVE (exit 2) should block.
 In Bash, the following permits PASS and INCONCLUSIVE but preserves unexpected errors:
 
 ```bash
 status=0
-quibble swap --incumbent histgb --candidate lightgbm --dataset wine --out results_ci || status=$?
+quibble-ml swap --incumbent histgb --candidate lightgbm --dataset wine --out results_ci || status=$?
 if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then exit "$status"; fi
 ```
 

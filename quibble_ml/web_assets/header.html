@@ -1,0 +1,30 @@
+<header>
+  <div class="product-header">
+    <div><h1 class="brand">Quibble</h1><span class="product-label">LOCAL WORKBENCH</span></div>
+    <nav class="product-nav" aria-label="Product information">
+      <a href="/workbench" data-page="workbench">Workbench</a>
+      <a href="/blog" data-page="blog">Blog</a>
+      <a href="/about" data-page="about">About</a>
+      <a href="https://github.com/ushakrishnan/quibble" rel="noopener noreferrer">GitHub</a>
+      <a href="/docs/README.md" data-page="docs">Docs</a>
+      <select class="theme-select" data-theme-select aria-label="Color theme" hidden>
+        <option value="system">Theme: System</option>
+        <option value="light">Theme: Light</option>
+        <option value="dark">Theme: Dark</option>
+      </select>
+      <details class="appearance-options">
+        <summary>Appearance</summary>
+        <label>Accent <select data-accent-select hidden>
+          <option value="blue">Blue</option><option value="teal">Teal</option>
+          <option value="indigo">Indigo</option><option value="violet">Violet</option>
+          <option value="fuchsia">Fuchsia</option><option value="slate">Slate</option>
+        </select></label>
+        <label>Contrast <select data-contrast-select hidden>
+          <option value="standard">Standard</option><option value="high">High</option>
+        </select></label>
+      </details>
+    </nav>
+  </div>
+  <p data-appearance-warning class="notice" role="status" hidden></p>
+  <p class="tagline">Before you swap a tabular model, see exactly what changes.</p>
+</header>

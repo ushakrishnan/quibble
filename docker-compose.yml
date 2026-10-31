@@ -1,6 +1,6 @@
 # UNTESTED. Usage:
-#   docker compose run --rm cpu quibble.run --sweep --backends histgb --datasets breast_cancer
-#   docker compose run --rm gpu quibble.run --sweep --backends catboost --datasets breast_cancer
+#   docker compose run --rm cpu quibble_ml.run --sweep --backends histgb --datasets breast_cancer
+#   docker compose run --rm gpu quibble_ml.run --sweep --backends catboost --datasets breast_cancer
 # GPU needs the NVIDIA container toolkit (Docker Desktop + WSL2 GPU support on Windows).
 x-base: &base
   build: .

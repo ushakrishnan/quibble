@@ -19,10 +19,31 @@ See the [project rationale](rationale.md) for the scope.
 | Inputs and operation | Built-in/OpenML inputs, named local CSV/Parquet, source fingerprints, centralized caches, benchmark presets, and isolated smoke checks |
 | Interactive experiments | Task-filtered existing data, four bundled synthetic examples, provider-assisted recipes, reviewed variants, save/discard-and-continue, separate history, and product/About navigation |
 | Reuse and development | Optional tree/AutoGluon fit retention, validation leaderboards, packaging, regression tests, CI definition, and container definitions |
+| Reviewed intake | Local browser CSV/Parquet upload and a separate hash-bound multi-table relationship/task review; no model fit during parsing |
+| Explicit scientific recipes | Pinned experimental TabICLv2 CPU/CUDA and Mitra-v2 CUDA task paths; bounded training-only tree tuning with separate recipe roots |
+| Extended diagnostics | Descriptive per-class reliability, opt-in exploratory interactions and relational history/recency/cold-start summaries |
+| Relational evaluation | Point-in-time aggregates, horizon-purged chronological holdout, keyed/grouped evidence, synthetic leakage proofs and one permissively licensed sampled public pilot |
+| Appearance | Six accents across light/dark, independent high contrast, synchronized persisted settings and an accessible desktop rail/mobile drawer |
+| Evidence workbench | Complete section navigation and printing, explicit allowlisted diagnostics, separate saved-evidence swap/baseline artifacts and descriptive two-job compatibility; no inferred winner or equivalence |
 
 Implemented capability and validation coverage are separate. The
 [validation matrix](index.md#trust-levels-what-has-actually-been-run) identifies which
 model/platform paths have been exercised.
+
+The public relational pilot is a bounded sample of
+`rel-arxiv/author-publication`, not an official full-corpus benchmark. Its
+47 training, 64 validation and 64 test examples retain official chronological
+boundaries after a 182-day horizon purge. Event-time availability is an
+assumption, not independently established production availability.
+
+TabPFN now passes bounded offline Wine and diabetes holdouts on CPU/CUDA;
+its restricted weight terms still apply. A standalone direct native Kumo
+Relational probe also passes both tasks on CPU/CUDA with synthetic related
+tables and no endpoint/data transfer. Registered-manifest, worker and browser
+integration for that native route remains outstanding. The alternative SDK/NIM
+route still needs an approved deployment. Flattening tables for local trees is
+not a native relational-model comparison.
+Local tests/builds do not establish remote CI, container support or a new release.
 
 ## Evaluation priorities
 
@@ -35,7 +56,7 @@ model/platform paths have been exercised.
 5. Separate smoke success, successful full-data fits, and evidence supporting a replacement.
 6. Publish configurations and failure coverage alongside findings, rather than only successful scores.
 7. Include credible simple baselines alongside complex methods. `dummy` and `linear` (logistic or
-   ridge regression) are implemented and `quibble gate` tests against them; nearest-neighbor
+   ridge regression) are implemented and `quibble-ml gate` tests against them; nearest-neighbor
    predictors remain a proposed addition. The internal `weak` backend is a sanity check, not
    a substitute.
 8. Use controlled synthetic tasks to investigate sensitivity to training size, feature
@@ -44,8 +65,8 @@ model/platform paths have been exercised.
 
 ## Proposed workflow: describe, generate, evaluate
 
-Status: the bounded independent-row workflow is implemented through `quibble web` and
-`quibble generate`. A user-configured OpenAI-compatible service can draft specifications
+Status: the bounded independent-row workflow is implemented through `quibble-ml web` and
+`quibble-ml generate`. A user-configured OpenAI-compatible service can draft specifications
 using API-key, Entra ID, or loopback no-auth configuration. Valid end-to-end live drafts
 still need targeted validation; an HTTP 200 response does not establish schema correctness.
 See the [workbench guide](experiment-workbench.md)
@@ -150,7 +171,7 @@ findings on suitable real data before drawing application conclusions.
 
 Implemented since the last plan revision: configuration identity checks on result reuse (settings,
 model-specific settings and library versions), group and temporal splits and group-clustered
-intervals for local data, data flags, `dummy` and `linear` baselines, `quibble gate`, retraining-aware
+intervals for local data, data flags, `dummy` and `linear` baselines, `quibble-ml gate`, retraining-aware
 swap intervals under covariance assumptions, an exploratory maximum-slice bootstrap,
 seed-noise subtraction, and `--retry-failed`.
 
@@ -184,7 +205,9 @@ These are planned improvements, not claims that the additional interfaces are av
 - Validate the GitHub Actions and container definitions on their intended platforms.
 - Invite relevant model maintainers to review evaluation configurations and interpretation.
 
-The distribution name is `quibble-ml`; the import and command are `quibble`.
+The distribution and command are `quibble-ml`; the Python import is `quibble_ml`.
+See the [namespace migration instructions](getting-started.md#migrating-from-the-old-import-and-command)
+for old results and retained-model compatibility.
 The package has not been published.
 
 ## Scope discipline

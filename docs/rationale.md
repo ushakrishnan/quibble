@@ -59,7 +59,7 @@ ranking of model families.
 - PASS / FAIL / INCONCLUSIVE swap checks under configurable limits, with intervals that also count
   approximate retraining variation (5+ splits), an exploratory worst-slice bootstrap, and a seed-noise floor for
   disagreement.
-- Simple baselines (`dummy`, `linear`) and `quibble gate`, which asks whether a model beats a baseline.
+- Simple baselines (`dummy`, `linear`) and `quibble-ml gate`, which asks whether a model beats a baseline.
 - Group and temporal splits for local data, group-clustered intervals, and cheap data flags for
   suspicious columns.
 - Interpreted reports, bounded smoke checks, dated result history, and optional supported-model retention.
@@ -144,7 +144,7 @@ Quibble is not a prediction service, a general data platform, or a production-sa
 certification system. Its leakage checks are cheap heuristics, not detection, and it does not
 implement license-aware model selection, relational or multi-table evaluation, or hyperparameter tuning.
 
-The [recommend and abstain proposal](recommend-abstain.md) records what is shipped (`quibble gate`,
+The [recommend and abstain proposal](recommend-abstain.md) records what is shipped (`quibble-ml gate`,
 data flags) and what is still proposed (a Python `recommend()` API across many candidates and
 license-aware selection).
 

@@ -16,17 +16,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - run: pytest --basetemp=.cache/pytest
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.11"
+          enable-cache: true
+      - run: uv sync --locked --python ${{ matrix.python-version }} --extra web --extra data
+      - run: uv pip check
+      - run: uv run --no-sync pytest --basetemp=.cache/pytest
       - name: Demo end to end
-        run: quibble demo --out demo_results --cv 3x1
+        run: uv run --no-sync quibble-ml demo --out demo_results --cv 3x1
       - name: Swap exit codes (a deliberately weak candidate must FAIL)
         shell: bash
         run: |
           status=0
-          quibble swap --incumbent histgb --candidate lightgbm --dataset breast_cancer --out demo_results || status=$?
+          uv run --no-sync quibble-ml swap --incumbent histgb --candidate lightgbm --dataset breast_cancer --out demo_results || status=$?
           test "$status" -eq 0 || test "$status" -eq 2
           status=0
-          quibble swap --incumbent histgb --candidate weak --dataset breast_cancer --out demo_results || status=$?
+          uv run --no-sync quibble-ml swap --incumbent histgb --candidate weak --dataset breast_cancer --out demo_results || status=$?
           test "$status" -eq 1

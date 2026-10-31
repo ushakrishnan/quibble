@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble import datasets
-from quibble.generate import generate, main, preview, recommendation, save, validate_spec
+from quibble_ml import datasets
+from quibble_ml.generate import generate, main, preview, recommendation, save, validate_spec
 
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
@@ -130,18 +130,18 @@ def test_changed_generation_metadata_changes_source_identity(tmp_path, monkeypat
 
 def test_cli_example_and_save(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("QUIBBLE_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setattr("sys.argv", ["quibble generate", "--example"])
+    monkeypatch.setattr("sys.argv", ["quibble-ml generate", "--example"])
     assert main() == 0
     spec = json.loads(capsys.readouterr().out)
     spec_path = tmp_path / "spec.json"
     spec_path.write_text(json.dumps(spec))
-    monkeypatch.setattr("sys.argv", ["quibble generate", "--spec", str(spec_path)])
+    monkeypatch.setattr("sys.argv", ["quibble-ml generate", "--spec", str(spec_path)])
     assert main() == 0
     assert datasets.known(spec["name"])
 
 
 def test_cli_rejects_ambiguous_generation_source():
-    from quibble.generate import create_parser
+    from quibble_ml.generate import create_parser
     with pytest.raises(SystemExit) as caught:
         create_parser().parse_args(["--example", "--spec", "ignored.json"])
     assert caught.value.code == 2

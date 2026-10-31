@@ -16,7 +16,7 @@ quibble answers one question for tabular machine learning: **if I swap one backe
 what actually changes?** It runs several backends (AutoGluon, TabPFN, TabFM, KumoTabular, LightGBM, CatBoost,
 scikit-learn's HistGradientBoosting, and any you add) on identical data and identical splits, then
 reports quality with confidence intervals, cost, refusals, calibration, slices, and the individual
-rows on which the models disagree. `quibble swap` condenses that into a PASS / FAIL / INCONCLUSIVE
+rows on which the models disagree. `quibble-ml swap` condenses that into a PASS / FAIL / INCONCLUSIVE
 verdict that can gate a CI pipeline.
 
 It is deliberately **not** a universal wrapper around tabular models. scikit-learn's
@@ -31,10 +31,11 @@ outside the browser's bounded controls.
 
 | If you want to... | Read |
 |---|---|
+| Understand each capability through everyday examples and honest limits | [What Quibble does](what-quibble-does.md) |
 | Read the project story and engineering lessons | [Predicting from Tables](blog/README.md) |
 | Understand the product, privacy, and browser navigation | [About Quibble](about.md) |
 | See it work in one minute | [Getting started](getting-started.md) |
-| Use device-aware presets or isolated smoke checks | [Benchmark command](cli-reference.md#quibble-benchmark) |
+| Use device-aware presets or isolated smoke checks | [Benchmark command](cli-reference.md#quibble-ml-benchmark) |
 | Compare your own CSV or Parquet table | [Testing your own data](testing-your-data.md) |
 | Design synthetic data and run comparisons in a browser | [Experiment workbench](experiment-workbench.md) |
 | Understand the vocabulary and the fairness rules | [Concepts](concepts.md) |
@@ -62,13 +63,20 @@ outside the browser's bounded controls.
 | TabFM and KumoTabular on CPU | Small real classification/regression smoke checks plus mocked adapter contracts |
 | Analysis, swap, report, CLI, caches/history | Automated regression tests; run `python -m pytest` for current results |
 | Local CSV/Parquet | Automated input/provenance checks plus real CSV classification and Parquet regression CLI workflows |
-| TabPFN | Refusal logic tested; package/checkpoint source inspected, but end-to-end inference remains unverified (`quibble doctor` labels it experimental) |
-| Linear and dummy baselines, group/temporal splits, data flags, `quibble gate` | Automated tests, including planted-signal, noise, leakage and grouped-bootstrap cases |
-| OpenML downloads | IDs/downloads remain unverified; inspect `quibble datasets --verify --names ...` output before use |
+| TabPFN | Real offline Wine classification and diabetes regression holdouts on CPU/CUDA with TabPFN9.2.0/v3.5, checked checkpoint hash, rows, class order, finite predictions and reports; experimental beyond this scope. An empty-cache, network-denied run produced an error and no predictions. |
+| TabICLv2 | Pinned experimental adapter; real offline Wine classification and diabetes regression holdouts on CPU and CUDA, with checked shapes/class order/checkpoint SHA-256 and reports. CPU comparison includes HistGB. Broader coverage remains unverified. |
+| Mitra-v2 | Pinned experimental CUDA adapter; real offline Wine zero-shot classification and diabetes distributional regression with prediction-time adaptation. Hashes, task APIs, shapes and inclusive costs checked; seed control and broader coverage remain unverified. |
+| Tuned tree tier | Bounded CPU HistGB, LightGBM and CatBoost campaigns; real defaults/tuned browser workflows and separate-root cross-tier reports. Tiny tuned campaigns did not establish improvement. |
+| Relational baseline | Synthetic point-in-time/cache/leakage proofs, repeated-entity grouping and real four-table browser review/run; permissive sampled `rel-arxiv/author-publication` pilot with official chronological boundaries, not a full benchmark. |
+| Browser appearance | Real light/dark, six-accent and high-contrast checks; keyboard/mobile navigation, persisted settings and static exports. Appearance does not change scientific verdicts. |
+| Browser evidence/verification/comparison | Complete report navigation and printing, explicit allowlisted diagnostics, separate saved-policy checks, and descriptive two-job compatibility. Real swap FAIL, baseline INCONCLUSIVE and matched comparison were exercised; no automatic paired comparison verdict. |
+| Native Kumo Relational | Standalone direct SDM0.2.1 CPU/CUDA synthetic three-table probe with 32 context/16 query entities, checked task checkpoint hashes and time-filtered history. No endpoint/data transfer; CUDA graph joins used a visible CPU fallback. Registered Quibble manifest/worker/browser integration remains unimplemented. |
+| Linear and dummy baselines, group/temporal splits, data flags, `quibble-ml gate` | Automated tests, including planted-signal, noise, leakage and grouped-bootstrap cases |
+| OpenML downloads | All 14 loaded and reloaded offline on Windows, 2026-10-30; full HistGB/Weak holdouts covered `credit-g` and `abalone` only. See [exact scope and caveats](datasets.md#verification-on-2026-10-30). |
 | CUDA detection | Confirmed locally with CUDA-enabled PyTorch on an RTX 5070 Ti |
 | TabFM and KumoTabular on CUDA | Successful local Wine classification records, including isolated smoke runs; not full GPU/task/dataset coverage |
 | CatBoost on CUDA | Successful local classification smoke run with exclusion/report checks; not full GPU/task/dataset coverage |
-| TabPFN and AutoGluon on CUDA | TabPFN real model execution remains unverified here; AutoGluon is excluded from new GPU-only runs |
+| TabPFN and AutoGluon on CUDA | TabPFN Wine/diabetes holdouts passed with the specified v3.5 checkpoint; broader coverage unverified. AutoGluon is excluded from new GPU-only runs. |
 | Docker files | **Not tested** |
 | GitHub Actions workflow | Definition targets Python 3.10 to 3.13 (Linux) and 3.13 (Windows); remote execution remains unverified. The same steps pass locally on Linux, Python 3.12 |
 | Hosted-service backend | Not implemented |
@@ -84,4 +92,4 @@ not a completed full-data benchmark.
 ## Design proposals, not shipped features
 
 - [Recommend and abstain layer](recommend-abstain.md): baseline gates and data flags are
-  shipped (`quibble gate`); a Python `recommend()` API and licensing checks remain proposed.
+  shipped (`quibble-ml gate`); a Python `recommend()` API and licensing checks remain proposed.

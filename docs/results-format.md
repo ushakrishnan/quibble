@@ -5,6 +5,11 @@ description: Run records, predictions, analysis files, and swap verdicts produce
 
 ## Results format
 
+Saved results are an experiment's receipts: what ran, which examples it saw,
+what it predicted, how long it took, and what failed. Keep the matching receipts
+together. A score copied without its recipe or test-row identities cannot
+establish that two models took the same test.
+
 Everything quibble produces is a plain file, so results can be inspected, diffed, archived and
 re-analyzed without retraining. Slice/trait analysis reloads the original dataset; saved
 predictions alone are not a complete replacement for its source/cache.
@@ -23,15 +28,18 @@ Saved policies remain available when reopening an experiment after a restart.
     <backend>_ss<split>_ms<mseed>.pred.npy   predictions; check matching record for success
     y_test_ss<split>.npy                 true test targets for that split
     idx_test_ss<split>.npy               test row positions in the loaded dataset
-    analysis/                            written by `quibble analyze` / `swap`
+    analysis/                            written by `quibble-ml analyze` / `swap`
       summary.csv  calibration.csv  slices.csv  analysis.json   (analysis.json carries data_flags)
       disagreements_<a>_vs_<b>.csv
       swap_<incumbent>_to_<candidate>.json
   report/
     report.md  fig_<dataset>_*.png        stable latest report
+    participation.csv                    participation and code/weight terms
+    backend_provenance.json               complete runtime metadata and recipes
     history.md                          index of dated snapshots
     legacy/                             earlier outputs moved here during migration
   invocation.json                       latest sweep selection and cell execution status
+  .quibble-tier.json                     root tier/search guard, including failed campaigns
   artifacts/<dataset>/<cell>/<run-id>/   optional retained models, not copied into history
   smoke/<unique-id>/                    isolated setup checks with their own reports
   runs/
@@ -46,7 +54,134 @@ The `.pred.npy`, `y_test` and `idx_test` files are NumPy arrays (`numpy.load`). 
 `(n_test, n_classes)` probabilities for classification and `(n_test,)` for regression. Test arrays
 are in the same row order for every backend of a split, which is what makes pairing possible.
 
+## Recipe identity
+
+New records snapshot the actual recipe tier, explicit adapter parameters, library
+versions, requested preprocessing/device, CV assignment, split/model seeds, and
+checkpoint identity (including unknowns). `sha256` covers the normalized request;
+`family_sha256` excludes the individual split/model seed so normal repeated
+evaluations can be pooled. `algorithm_sha256` identifies the algorithm-level
+configuration for cached reuse. After fitting, `resolved` captures estimator
+parameters where exposed, effective backend settings, source fingerprint and
+train/test-row hashes. `resolved_sha256` and `full_sha256` cover that evidence.
+
+Changed tiers, search recipes, dependency versions, ensemble settings or declared
+checkpoints require a separate `--out`; `--force` cannot override those checks.
+Writing new records with a different preprocessing/device/CV family is also
+rejected. Cached runs with only those historical setting differences retain
+their existing warning behavior: they are saved evidence, not a new evaluation.
+Do not treat that warning as proof that the old predictions were invalidated.
+
+Pooling rejects inconsistent digests or mixed recipe families, including across
+model seeds of the same backend. Pure legacy evidence remains readable with
+incomplete metadata; new fits require a separate output directory rather than
+mixing versioned records into legacy evidence. A failed fit can still be retried
+after installing a missing library because it contributed no usable predictions.
+
+Foundation checkpoint revisions/checksums and some library-internal parameter
+details are not exposed by the current adapters. Those fields remain unknown and
+`identity_complete` stays false. These digests detect recorded configuration
+differences; they cannot prove unknown downloaded weights were identical.
+The metadata is not a signature or protection against deliberate file tampering.
+Reports, analysis JSON, participation CSV, workbench jobs and dated snapshots
+preserve the recorded terms and recipes instead of inventing historical terms.
+
+## Tuned tree evidence and cost
+
+`campaign_tier` identifies the requested comparison tier. `tier` and
+`recipe.requested.tier` identify the actual model recipe. In a tuned campaign,
+HistGB, LightGBM and CatBoost are `tuned`; unchanged foundation adapters remain
+`defaults` (with their existing adaptation metadata), not implicitly fine-tuned.
+Unsupported non-foundation families are refused explicitly.
+
+Successful tuned trees add a `tuning` object with:
+
+* `protocol`: frozen domains, search version/seed, metric rule, trial/fold budget,
+  candidate ordering, aggregation, tie-breaker and deadline semantics
+* `split_spec`, `outer_training_indices_sha256`, `inner_splits`: declared split
+  structure and hashes of each inner training/validation row identity
+* `attempts`: each attempted candidate's index/parameters, model/search seeds,
+  metric and fold-level split IDs, values, durations, statuses and failures
+* `attempted_fits`, `successful_fits`, `requested_candidate_fits`,
+  `requested_refit_fits`: actual and requested counts, including failed fits
+* `selected_trial`, `selected_params`, `refit`: the winner and its final
+  outer-training refit status, seed, parameters, row count and duration
+* `search_s`, `total_s`, `deadline_overrun`: measured selection and total
+  search/refit wall time and cooperative overrun disclosure
+
+Top-level `search_s`, `refit_s` and `search_refit_s` expose selection, final refit,
+and their measured combined cost. `fit_total_s` also includes the full search
+call; for tuned trees, legacy `fit_s` therefore includes inner fitting,
+validation and selection overhead, not just winning-model training.
+`load_s` measures final-refit model construction only; inner construction is
+already included in search cost. Do not add `search_refit_s` to `fit_total_s`:
+they overlap. Search time is not backend-independent compute or a fairness claim.
+
+A search with no valid complete candidate writes `error` and
+`tuning.status=failed`, retains completed failure evidence, and never falls back
+to defaults. An interrupted worker records `error_kind=timeout` or `worker_exit`
+and `tuning.status=incomplete`; attempt details may be unrecoverable and no
+partial results qualify as success. Check the JSON outcome even if an old
+prediction file remains after a failed forced rerun.
+
+`invocation.json` carries `campaign_tier`, `tuning_protocol` and
+`worker_timeout_s`. Recipe digests include the search version, exact finite
+domains, metric, budgets, seeds and cooperative deadline. Changing any of these
+cannot reuse successful tuned evidence. The root guard additionally prevents
+mixing tiers/protocols even across different backends or failed records.
+Reports export `training_protocol.csv` and `stage_costs.csv` alongside full
+attempt evidence in `backend_provenance.json`. The report distinguishes requested
+campaign from actual adapter tier and shows search/refit/full model costs with
+explicit overlap warnings. `model_pipeline_s = fit_total_s + batch_prediction_s`
+includes prediction-time adaptation but excludes latency probes and shared
+feature construction.
+
+Browser `job.json` saves `tier`, `campaign_tier`, all `tune_*` controls,
+`tuning_confirmed` and `tuning_protocol`; full-run approval is separate.
+Defaults are pinned independently of inherited tuning environment settings.
+Changing the browser's data/method/settings request invalidates approval.
+For explicit separate-root contrasts, `quibble_ml.tuning.load_tier_pair` returns
+`defaults` and `tuned` entries containing `record` and `predictions`, plus shared
+`y_test` and `idx_test` arrays. It rejects mismatched protocols, sources, row
+identities, targets or failed/incomplete cells; it does not pool, copy or alter
+either campaign.
+The report CLI offers `--compare-tiers DEFAULTS_ROOT TUNED_ROOT --tier-backend
+histgb`, with `--datasets` and `--report-dir` as needed. It emits tier-qualified
+same-backend paired cell point estimates in `tier_comparison.csv` and complete
+evidence in `tier_comparison.json`, without mixing roots or issuing swap approval.
+
+Relational records do not require flat-file `path`, `target` or `drop_columns`.
+Their `relational_audit` is shown separately. Worker `feature_costs.feature_total_s`
+is displayed beside each model only as a shared reference, never summed across
+backends. When present, root `relational-feature-stage.json` preserves the
+explicit front-stage feature time and cache state once, separately from warm
+worker reloads; it is linked and included in archived provenance.
+When available, reports display at most twenty `relational_slices` rows and link
+the complete `analysis/relational_slices.csv`. Limited and empty support remain
+explicit. These fixed label-free masks provide descriptive point estimates,
+not intervals, causal claims or gate criteria.
+
 ## Run record (`*.json`)
+
+Adapters with `prediction_adapts=true` run the outer-test batch prediction once
+and skip repeated warm-up and single-row latency probes.
+`adaptation_and_prediction_s` measures that complete prediction call, including
+fused prediction-time loading, adaptation and inference.
+`predict_ms_per_row_batch` is its inclusive per-row amortization, not isolated
+inference latency. `single_row_p50_ms` and `single_row_p95_ms` are null,
+`single_row_latency_available` is false, and `weight_load_s`, `adaptation_s` and
+`prediction_only_s` remain null when those components cannot be measured
+separately. Fit-stage context registration costs remain in the existing fit/load
+fields; they must not be presented as isolated prediction-time weight loading.
+
+OpenML records now include `dataset_source` with dataset/version/file IDs,
+the upstream ARFF `md5_checksum`, target, licence/citation fields and encoded
+`class_labels` for classification. Its `sha256` hashes loaded content under the
+recorded `hash_scheme`, not raw download bytes. The source `fingerprint` combines
+that content with upstream identity and task/target. These fields survive
+analysis, reports and snapshots; missing legacy fingerprints are not fabricated.
+See [dataset source hashes](datasets.md#source-hashes-and-reuse).
+
 A real example (environment block omitted):
 ```json
 {
@@ -67,7 +202,10 @@ A real example (environment block omitted):
 | `backend`, `dataset`, `split_seed`, `model_seed` | identity of the run (`split_seed` is the split id) |
 | `run_id`, `timestamp` | new records: invocation ID and local ISO timestamp with UTC offset; sweep children share an ID |
 | `run_type`, `cv_seed`, `cache_dir` | benchmark/smoke designation, CV assignment seed, and central cache root |
+| `backend_metadata` | runtime library/version, code license/source, weight reference terms, review date, access caveats, verification scope, and explicit unknown checkpoint revision/checksum |
+| `recipe` | versioned requested recipe and digests; fitted estimator parameters/context where exposed; explicit incomplete identity for unresolved checkpoints |
 | `dataset_source` | local inputs: source path, file SHA-256, data/manifest fingerprint, target/task, excluded/categorical columns, and encoded class-label order; generated inputs also carry `synthetic` metadata (generator, version, seed, metadata hash) |
+| `dataset_source.uploaded` | browser imports: original filename/hash, parser format/encoding/missing-value rules and pandas version, reviewed manifest/schema/rows, and import-metadata hash; changes invalidate the reviewed identity |
 | `device_requested`, `device`, `device_attempted`, `device_effective` | requested policy, resolved sweep device, attempted backend device, and completed backend device where available |
 | `error_kind`, `worker_exit_code`, `cleanup_error` | optional failure classification, crashed worker exit code, and cleanup failure detail; failures do not silently retry on another device |
 | `n_train_available`, `n_test_available` | rows before optional smoke sampling; `n_train`/`n_test` record actual evaluated sizes |
@@ -104,8 +242,8 @@ than normal fit records. Configuration, archive, and output-storage failures can
 the command before a normal result is written.
 
 Peak resident memory uses `resource.getrusage` on Unix and the peak working set from
-`psutil` on Windows. The Windows-only dependency is installed automatically by both
-the package installer and `requirements.txt`; the result field remains `peak_rss_mb`.
+`psutil` on Windows. Its platform marker in `pyproject.toml` installs it
+automatically on Windows; the result field remains `peak_rss_mb`.
 
 ### `env` block
 `python`, `platform`, `cpu`, `cores`, `ram_gb`, `git` (short commit hash, or null outside a git

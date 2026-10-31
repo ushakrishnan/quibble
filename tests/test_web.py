@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from quibble import generate
-from quibble.web import Server, Workbench, render_report
-from quibble.web import ASSETS
+from quibble_ml import generate
+from quibble_ml.web import Server, Workbench, render_report
+from quibble_ml.web import ASSETS
 
 
 def test_workflow_has_one_data_choice_and_shared_run_screen():
@@ -24,11 +24,16 @@ def test_workflow_has_one_data_choice_and_shared_run_screen():
     assert 'id="chosen-dataset"' in experiment
     assert '<section id="new-path" aria-labelledby="scenario-heading" hidden>' in html
     assert '<section id="run-path" aria-labelledby="experiment-heading" hidden>' in html
-    workspace = html.split('<nav class="workspace-nav"', 1)[1].split("</nav>", 1)[0]
+    workspace = html.split('<aside id="workbench-sidebar"', 1)[1].split("</aside>", 1)[0]
     steps = html.split('<nav id="workflow-steps"', 1)[1].split("</nav>", 1)[0]
-    assert 'id="nav-workflow"' in workspace and 'id="nav-history"' in workspace
+    assert 'href="#page=home"' in workspace and 'id="nav-history"' in workspace
     assert 'id="nav-history"' not in steps
     assert all(f'id="nav-{name}"' in steps for name in ("data", "run", "results"))
+    assert 'id="full-confirmed"' not in experiment
+    start = html.split('<section id="start-path"', 1)[1].split("</section>", 1)[0]
+    assert 'id="full-confirmed"' in start and 'id="start-summary"' in start
+    assert html.index('id="run-progress"') < html.index('id="home-path"')
+    assert html.count('id="run"') == 1
     assert 'id="scenario-sample"' not in html
     assert 'id="continue-new"' not in html
     assert '>Save and continue</button>' in html
@@ -51,9 +56,19 @@ def test_unified_catalog_labels_tasks_and_sources(app):
     assert catalog["custom_saved"]["group"] == "Saved datasets"
 
 
+def test_method_metadata_exposes_code_and_weight_terms(app):
+    from quibble_ml.provenance import backend_metadata
+    state = app.state()
+    assert set(state["backend_metadata"]) == set(state["backends"])
+    for name in state["backends"]:
+        assert state["backend_metadata"][name] == backend_metadata(name)
+    assert state["backend_metadata"]["tabfm"]["library"]["license"] == "Apache-2.0"
+    assert "non-commercial" in state["backend_metadata"]["tabfm"]["weights"]["restrictions"].lower()
+
+
 def test_product_header_and_about_are_separate_from_workflow():
     html = (ASSETS / "index.html").read_text(encoding="utf-8")
-    from quibble.web import render_header
+    from quibble_ml.web import render_header
     assert "__PRODUCT_HEADER__" in html
     header = render_header("workbench")
     assert '<h1 class="brand">Quibble</h1>' in header
@@ -69,7 +84,7 @@ def test_product_header_and_about_are_separate_from_workflow():
 
 
 def test_documentation_navigation_covers_guides_and_anchors():
-    from quibble.web import DOCS, DOC_NAV, documentation_files, render_document
+    from quibble_ml.web import DOCS, DOC_NAV, documentation_files, render_document
     filenames = [name for _, names in DOC_NAV for name in names]
     assert len(filenames) == len(set(filenames))
     assert set(filenames) == {path.relative_to(DOCS).as_posix()
@@ -167,7 +182,7 @@ def test_existing_generated_review_reuse_and_save_new(app):
 
 
 def test_existing_review_rejects_changed_source(app):
-    from quibble import datasets
+    from quibble_ml import datasets
     spec = generate.recommendation(rows=100)
     generate.save(spec)
     review = app.action("/api/inspect", {"dataset": spec["name"]})
@@ -210,7 +225,7 @@ def test_ready_made_samples_are_saved_reviewable_and_reusable(app, monkeypatch, 
 
 
 def test_imported_dataset_review_preserves_label_names(app):
-    from quibble import datasets
+    from quibble_ml import datasets
     directory = datasets.data_root() / "imported"
     directory.mkdir(parents=True)
     (directory / "dataset.json").write_text(json.dumps({
@@ -224,7 +239,7 @@ def test_imported_dataset_review_preserves_label_names(app):
 
 
 def test_provider_consent_and_no_silent_fallback(app, monkeypatch):
-    from quibble import planner
+    from quibble_ml import planner
     def fail(*args):
         raise planner.PlannerError("provider unavailable")
     monkeypatch.setattr(planner, "plan", fail)
@@ -249,7 +264,7 @@ def test_formatted_report_preserves_structure_and_rewrites_only_known_figures():
         "[local](../analysis/rows.csv)\n",
         "123-abc", ["fig_quality.png"])
     for tag in ("h1", "h2", "strong", "em", "code", "table", "th", "td", "ul", "blockquote", "pre"):
-        assert f"<{tag}>" in html
+        assert (f"<{tag} id=" if tag in ("h1", "h2") else f"<{tag}>") in html
     assert 'src="/api/jobs/123-abc/figures/fig_quality.png"' in html
     assert 'href="https://example.com"' in html
     assert "../analysis" not in html and ">local</a>" in html
@@ -304,7 +319,7 @@ def test_http_origin_token_and_path_boundaries(app):
         page = request("/workbench").read().decode()
         assert server.token in page
         assert "Content-Security-Policy" in request("/").headers
-        from quibble import __version__
+        from quibble_ml import __version__
         about = request("/about")
         assert about.headers["Content-Type"] == "text/html; charset=utf-8"
         about_html = about.read().decode()
@@ -317,7 +332,7 @@ def test_http_origin_token_and_path_boundaries(app):
         assert 'data-page="about" aria-current="page"' in about_html
         assert 'href="/blog"' in about_html
         blog = request("/blog").read().decode()
-        from quibble.web import render_header
+        from quibble_ml.web import render_header
         for path, current in (("/", "about"), ("/workbench", "workbench"), ("/about", "about"),
                               ("/blog", "blog"), ("/docs/README.md", "docs")):
             rendered = request(path).read().decode()
@@ -387,7 +402,7 @@ def test_real_generated_dataset_benchmark_and_report(app, task, mode):
     assert spec["name"] in finished["report"]
     assert "### Synthetic experiment" in finished["report"]
     assert "<table>" in finished["report_html"]
-    assert "<h3>Interpretation" in finished["report_html"]
+    assert '<h3 id="interpretation' in finished["report_html"]
     assert f'/api/jobs/{record["id"]}/figures/' in finished["report_html"]
     assert finished["figures"]
     assert app.figure(record["id"], finished["figures"][0]).startswith(b"\x89PNG")
@@ -408,14 +423,14 @@ def test_run_rejects_arbitrary_commands_and_unconfirmed_full(app):
 @pytest.mark.parametrize("overrides", [None, {"max_quality_drop": 0.02}])
 def test_full_run_persists_effective_policy_and_passes_custom_file(app, monkeypatch, overrides):
     from pathlib import Path
-    from quibble.thresholds import DEFAULTS
+    from quibble_ml.thresholds import DEFAULTS
     commands = []
 
     def worker(command, **kwargs):
         commands.append(command)
         return SimpleNamespace(returncode=1)
 
-    monkeypatch.setattr("quibble.web.subprocess.run", worker)
+    monkeypatch.setattr("quibble_ml.web.subprocess.run", worker)
     assert app.state()["threshold_defaults"] == DEFAULTS
     record = app.start({"dataset": "wine", "backends": ["histgb"], "mode": "full",
                         "device": "cpu", "cv": "holdout", "full_confirmed": True,
@@ -458,7 +473,7 @@ def test_web_rejects_invalid_policy_before_creating_job(app, overrides):
 
 
 def test_smoke_does_not_apply_or_save_a_swap_policy(app, monkeypatch):
-    monkeypatch.setattr("quibble.web.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    monkeypatch.setattr("quibble_ml.web.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
     body = {"dataset": "wine", "backends": ["histgb"], "mode": "smoke",
             "device": "cpu", "cv": "holdout"}
     with pytest.raises(ValueError, match="Smoke"):
@@ -494,7 +509,7 @@ def test_completed_report_can_be_reopened_after_server_restart(app):
         assert job["status"] == "completed"
         assert job["directory"] == str(directory)
         assert "A completed experiment." in job["report"]
-        assert "<h2>Interpretation</h2>" in job["report_html"]
+        assert '<h2 id="interpretation">Interpretation</h2>' in job["report_html"]
         assert any(j["id"] == directory.name for j in restarted.state()["jobs"])
     finally:
         restarted.close()
@@ -507,7 +522,7 @@ def test_failed_job_is_not_success_and_active_job_blocks_second(app, monkeypatch
         started.set()
         assert release.wait(10)
         return SimpleNamespace(returncode=1)
-    monkeypatch.setattr("quibble.web.subprocess.run", run)
+    monkeypatch.setattr("quibble_ml.web.subprocess.run", run)
     body = {"dataset": "wine", "backends": ["histgb"], "mode": "smoke", "device": "cpu", "cv": "holdout"}
     record = app.start(body)
     assert started.wait(10)
@@ -527,7 +542,7 @@ def test_failed_job_is_not_success_and_active_job_blocks_second(app, monkeypatch
     ("cpu", True, "cpu"), ("auto", False, "cpu"), ("auto", True, "cuda"), ("cuda", True, "cuda"),
 ])
 def test_web_pins_device_and_persists_exclusions(app, monkeypatch, device, available, resolved):
-    from quibble import config
+    from quibble_ml import config
     monkeypatch.setattr(config, "cuda_available", lambda: available)
     captured = []
 
@@ -535,7 +550,7 @@ def test_web_pins_device_and_persists_exclusions(app, monkeypatch, device, avail
         captured.append(kwargs["env"]["_QUIBBLE_RESOLVED_DEVICE"])
         return SimpleNamespace(returncode=1)
 
-    monkeypatch.setattr("quibble.web.subprocess.run", worker)
+    monkeypatch.setattr("quibble_ml.web.subprocess.run", worker)
     record = app.start({"dataset": "wine", "backends": ["histgb", "catboost", "autogluon"],
                         "mode": "smoke", "device": device, "cv": "holdout"})
     app.thread.join(10)
@@ -551,7 +566,7 @@ def test_web_pins_device_and_persists_exclusions(app, monkeypatch, device, avail
 
 
 def test_web_rejects_empty_gpu_selection_and_unavailable_cuda(app, monkeypatch):
-    from quibble import config
+    from quibble_ml import config
     body = {"dataset": "wine", "backends": ["histgb"], "mode": "smoke",
             "device": "cuda", "cv": "holdout"}
     monkeypatch.setattr(config, "cuda_available", lambda: True)

@@ -8,11 +8,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quibble.config import Config
-from quibble.datasets import split
-from quibble.gate import evaluate as gate
-from quibble.run import run_one, stem
-from quibble.swap import evaluate
+from quibble_ml.config import Config
+from quibble_ml.datasets import split
+from quibble_ml.gate import evaluate as gate
+from quibble_ml.run import run_one, stem
+from quibble_ml.swap import evaluate
 
 
 @pytest.mark.parametrize("failure", ["error", "refused", "prediction", "record", "shared"])
@@ -37,7 +37,7 @@ def test_gate_rejects_partial_coverage(cv_results, tmp_path, failure):
     assert result["coverage"]["missing"] == [1]
     assert result["coverage"]["reasons"]["1"]
     assert result["splits"] == 2
-    command = [sys.executable, "-m", "quibble", "gate", "--dataset", "breast_cancer",
+    command = [sys.executable, "-m", "quibble_ml", "gate", "--dataset", "breast_cancer",
                "--candidate", "lightgbm", "--baseline", "histgb", "--min-gain", "-1",
                "--out", str(out)]
     cli = subprocess.run(command, capture_output=True, text=True, timeout=60)
@@ -69,7 +69,7 @@ def test_gate_rejects_incomplete_baseline(cv_results, tmp_path):
 
 
 def test_gate_explicitly_rejects_no_usable_candidate(cv_results, tmp_path):
-    from quibble.swap import SwapError
+    from quibble_ml.swap import SwapError
     out = tmp_path / "results"
     shutil.copytree(cv_results, out)
     for path in (out / "breast_cancer").glob("lightgbm*.pred.npy"):
@@ -103,7 +103,7 @@ def test_one_class_temporal_training_is_explicitly_refused():
 
 @pytest.mark.parametrize("backend", ["histgb", "dummy", "linear", "tabpfn", "autogluon"])
 def test_missing_class_split_is_refused_before_any_backend_fits(tmp_path, monkeypatch, backend):
-    from quibble import datasets
+    from quibble_ml import datasets
     X, y = missing_class_data()
     monkeypatch.setattr(datasets, "load", lambda *a: (X, y, "classification"))
     monkeypatch.setenv("QUIBBLE_OUT_DIR", str(tmp_path))
@@ -116,7 +116,7 @@ def test_missing_class_split_is_refused_before_any_backend_fits(tmp_path, monkey
 
 
 def test_legacy_group_classification_requires_class_order_validation(tmp_path):
-    from quibble.datasets import validate_sources
+    from quibble_ml.datasets import validate_sources
     directory = tmp_path / "example"
     directory.mkdir()
     source = {"fingerprint": "same", "task": "classification", "group_column": "customer",
@@ -132,7 +132,7 @@ def test_legacy_group_classification_requires_class_order_validation(tmp_path):
 
 
 def test_saved_probability_columns_match_recorded_classes(cv_results, tmp_path):
-    from quibble.pool import load_pool
+    from quibble_ml.pool import load_pool
     out = tmp_path / "results"
     shutil.copytree(cv_results, out)
     path = stem(out, "breast_cancer", "histgb", 0, 0).with_suffix(".json")
@@ -153,7 +153,7 @@ def test_partial_policy_discloses_inherited_limits_in_result_and_json(cv_results
     assert "max_quality_drop" not in provenance["inherited"]
     policy = tmp_path / "policy.json"
     policy.write_text(json.dumps({"max_quality_drop": 0.02}))
-    command = [sys.executable, "-m", "quibble", "swap", "--dataset", "breast_cancer",
+    command = [sys.executable, "-m", "quibble_ml", "swap", "--dataset", "breast_cancer",
                "--incumbent", "histgb", "--candidate", "histgb", "--thresholds", str(policy),
                "--require-thresholds", "--out", str(cv_results)]
     cli = subprocess.run(command, capture_output=True, text=True, timeout=60)
@@ -164,7 +164,7 @@ def test_partial_policy_discloses_inherited_limits_in_result_and_json(cv_results
 
 
 def test_report_preserves_flags_notes_split_and_policy(cv_results, monkeypatch):
-    from quibble import report
+    from quibble_ml import report
     flag = {"flag": "time_like_column_random_split", "column": "event_date",
             "detail": "test warning about time ordering"}
     monkeypatch.setattr(report, "_plt", lambda: None)
@@ -187,7 +187,7 @@ def test_report_preserves_flags_notes_split_and_policy(cv_results, monkeypatch):
 
 
 def test_reseed_adjustment_keeps_raw_disagreement_visible(cv_results, monkeypatch):
-    import quibble.swap as swap
+    import quibble_ml.swap as swap
     monkeypatch.setattr(swap, "reseed_rate", lambda *a, **k: 0.2)
     result = evaluate("breast_cancer", "histgb", "histgb", out=cv_results)
     check = next(c for c in result["checks"] if c["check"].startswith("disagreement rate"))
@@ -196,8 +196,8 @@ def test_reseed_adjustment_keeps_raw_disagreement_visible(cv_results, monkeypatc
 
 
 def test_usable_corrected_interval_is_identified():
-    from quibble.metrics import Boot
-    from quibble.swap import interval
+    from quibble_ml.metrics import Boot
+    from quibble_ml.swap import interval
     _, lo, hi, notes = interval(Boot(np.arange(20), 30), lambda w: 0.0,
                                [0.0, 0.01, 0.0, -0.01, 0.0], 80, 20)
     assert np.isfinite(lo) and np.isfinite(hi)
@@ -206,7 +206,7 @@ def test_usable_corrected_interval_is_identified():
 
 
 def test_report_warns_when_using_saved_mismatched_results(cv_results, monkeypatch):
-    from quibble import report
+    from quibble_ml import report
     monkeypatch.setattr(report, "_plt", lambda: None)
     (cv_results / "invocation.json").write_text(json.dumps({"workflow": "run",
         "datasets": ["breast_cancer"], "backends": ["histgb"], "cells": [
